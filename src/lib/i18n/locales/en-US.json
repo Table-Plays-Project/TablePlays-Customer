@@ -1,0 +1,111 @@
+{
+  "common": {
+    "or": "or"
+  },
+  "alert": {
+    "emailCheck": "Please check your email to verify your account.",
+    "passwordUpdated": "Password updated successfully!",
+    "googleComingSoon": "Google sign-in is coming soon."
+  },
+  "buttons": {
+    "signIn": "Log In",
+    "signUp": "Sign Up",
+    "continueWithGoogle": "Continue with Google"
+  },
+  "links": {
+    "forgotPassword": "Forgot password?",
+    "signUp": "Sign up"
+  },
+  "fields": {
+    "email": {
+      "label": "Email",
+      "placeholder": "Enter your email",
+      "errors": {
+        "required": "Email is required",
+        "invalid": "Please enter a valid email"
+      }
+    },
+    "firstName": {
+      "label": "First Name",
+      "placeholder": "Enter your first name",
+      "errors": {
+        "required": "First name is required",
+        "minLength": "First name must be at least 2 characters"
+      }
+    },
+    "lastName": {
+      "label": "Last Name",
+      "placeholder": "Enter your last name",
+      "errors": {
+        "required": "Last name is required",
+        "minLength": "Last name must be at least 2 characters"
+      }
+    },
+    "password": {
+      "label": "Password",
+      "placeholder": "Enter your password",
+      "errors": {
+        "required": "Password is required",
+        "minLength": "Password must be at least 6 characters",
+        "uppercase": "Password must contain at least one uppercase letter",
+        "lowercase": "Password must contain at least one lowercase letter",
+        "specialCharacter": "Password must contain at least one special character"
+      }
+    },
+    "global": {
+      "required": "This field is required"
+    }
+  },
+  "errors": {},
+  "pages": {
+    "signIn": {
+      "appName": "TablePlays",
+      "tagline": "Play together. Win together.",
+      "title": "Welcome to\nour\nplatform",
+      "subtitle": "Log In",
+      "newOwner": "New Restaurant Owner?",
+      "registerLink": "Register",
+      "noAccount": "Don't have an account?",
+      "signUpLink": "Sign up"
+    },
+    "signUp": {
+      "title": "Create New Account",
+      "subtitle": "Join TablePlays today",
+      "haveAccount": "Already have an account?",
+      "signInLink": "Sign in"
+    },
+    "forgotPassword": {
+      "title": "Reset password",
+      "subtitle": "Enter your email and we'll send you a verification code.",
+      "button": "Send Code",
+      "backToSignIn": "Back to sign in"
+    },
+    "verifyOtp": {
+      "title": "Verification\nCode",
+      "subtitle": "Enter the code sent to your email",
+      "button": "Submit",
+      "resend": "Re-send code in",
+      "resendReady": "Resend code",
+      "spamHint": "Can't find the email? Check your spam folder."
+    },
+    "success": {
+      "accountVerified": "Account Verified\nSuccessfully",
+      "passwordChanged": "Password\nChanged",
+      "done": "Done"
+    },
+    "notFound": {
+      "title": "This screen doesn't exist.",
+      "link": "Go to home screen!"
+    },
+    "update": {
+      "title": "A new version is available!",
+      "message": "Update the app to continue using the latest features.",
+      "button": "Update Now"
+    },
+    "updatePassword": {
+      "title": "Set new password",
+      "subtitle": "Enter your new password below.",
+      "button": "Update Password"
+    }
+  }
+}
