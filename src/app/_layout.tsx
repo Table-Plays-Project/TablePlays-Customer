@@ -17,6 +17,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
 import { I18nextProvider } from 'react-i18next';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import 'react-native-reanimated';
 
 import AuthContext from '@/contexts/auth';
@@ -128,7 +129,24 @@ function MainLayout(): JSX.Element {
           return;
         }
         setAuth(session.user as CurrentUser);
-        router.replace('/(private)/dashboard/page');
+        const isGoogle = session.user.app_metadata?.provider === 'google';
+        if (isGoogle) {
+          const uid = session.user.id;
+          const key = `welcome_shown_${uid}`;
+          AsyncStorage.getItem(key).then((shown) => {
+            if (!shown) {
+              AsyncStorage.setItem(key, '1');
+              router.replace({
+                pathname: '/(public)/(auth)/success/page',
+                params: { flow: 'welcome' },
+              });
+            } else {
+              router.replace('/(private)/dashboard/page');
+            }
+          });
+        } else {
+          router.replace('/(private)/dashboard/page');
+        }
         return;
       }
       if (_event === 'INITIAL_SESSION') {

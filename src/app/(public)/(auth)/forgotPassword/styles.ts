@@ -16,7 +16,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: spacing[5],
-    paddingTop: spacing[6],
+    paddingTop: spacing[12],
     paddingBottom: spacing[8],
   },
   backButton: {
@@ -25,19 +25,26 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: fonts.bold,
     fontSize: fontSize.xl,
+    lineHeight: 28,
+    letterSpacing: -0.25,
     color: colors.textInverse,
     marginBottom: spacing[1],
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   subtitle: {
     fontFamily: fonts.regular,
     fontSize: fontSize.sm,
+    lineHeight: 18,
     color: colors.textInverse,
     marginBottom: spacing[6],
+    textShadowColor: 'rgba(0,0,0,0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   errorBanner: {
-    backgroundColor: 'rgba(220, 38, 38, 0.25)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: colors.error,
     borderRadius: borderRadius.md,
     padding: spacing[3],
     marginBottom: spacing[4],
@@ -48,8 +55,12 @@ const styles = StyleSheet.create({
   errorText: {
     fontFamily: fonts.medium,
     fontSize: fontSize.sm,
+    lineHeight: 18,
     color: colors.textInverse,
     flex: 1,
+    textShadowColor: 'rgba(0,0,0,0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   backLink: {
     alignItems: 'center',
@@ -59,8 +70,12 @@ const styles = StyleSheet.create({
   backLinkText: {
     fontFamily: fonts.semiBold,
     fontSize: fontSize.sm,
+    lineHeight: 18,
     color: colors.textInverse,
     textDecorationLine: 'underline',
+    textShadowColor: 'rgba(0,0,0,0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
 });
 

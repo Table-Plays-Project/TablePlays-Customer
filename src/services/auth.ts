@@ -5,7 +5,14 @@ export type AuthError = { message: string };
 function safeErrorMessage(error: unknown, fallback: string): string {
   if (error && typeof error === 'object' && 'message' in error) {
     const msg = (error as { message: unknown }).message;
-    if (typeof msg === 'string' && msg.length < 200) return msg;
+    if (typeof msg === 'string') {
+      if (
+        msg.toLowerCase().includes('rate') ||
+        msg.toLowerCase().includes('too many')
+      )
+        return 'Too many attempts. Please wait a few minutes and try again.';
+      if (msg.length < 200) return msg;
+    }
   }
   return fallback;
 }
@@ -212,5 +219,29 @@ export async function updateUserPassword(
   } catch (e) {
     console.error('updateUserPassword failed:', e);
     return { error: { message: 'Password update failed. Please try again.' } };
+  }
+}
+
+export async function updateUserProfile(
+  firstName: string,
+  lastName: string,
+): Promise<{ error: AuthError | null }> {
+  try {
+    const { error } = await supabase.auth.updateUser({
+      data: { first_name: firstName, last_name: lastName },
+    });
+    if (error)
+      return {
+        error: {
+          message: safeErrorMessage(
+            error,
+            'Profile update failed. Please try again.',
+          ),
+        },
+      };
+    return { error: null };
+  } catch (e) {
+    console.error('updateUserProfile failed:', e);
+    return { error: { message: 'Profile update failed. Please try again.' } };
   }
 }

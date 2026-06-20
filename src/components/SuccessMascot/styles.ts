@@ -1,31 +1,31 @@
 import { StyleSheet } from 'react-native';
-import { borderRadius, fonts, fontSize, spacing } from '@/constants/theme';
+import { fonts, fontSize as fs, spacing } from '@/constants/theme';
 
 export const styles = StyleSheet.create({
-  card: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: borderRadius.xl,
-    padding: spacing[8],
+  container: {
     alignItems: 'center',
-    marginHorizontal: spacing[5],
+    paddingHorizontal: spacing[5],
   },
   mascotImage: {
-    width: 220,
-    height: 220,
+    width: 320,
+    height: 320,
+  },
+  headingWrap: {
+    marginTop: spacing[2],
     marginBottom: spacing[6],
+    alignItems: 'center',
   },
-  heading: {
-    fontFamily: fonts.bold,
-    fontSize: fontSize['2xl'],
-    color: '#FFFFFF',
-    textAlign: 'center',
-    marginBottom: spacing[3],
-  },
-  message: {
-    fontFamily: fonts.regular,
-    fontSize: fontSize.base,
+  subtitle: {
+    fontFamily: fonts.medium,
+    fontSize: fs.base,
     color: 'rgba(255, 255, 255, 0.85)',
     textAlign: 'center',
-    marginBottom: spacing[8],
+    marginTop: spacing[3],
+    paddingHorizontal: spacing[4],
+    lineHeight: 22,
+  },
+  buttonWrap: {
+    width: '100%',
+    paddingHorizontal: spacing[4],
   },
 });

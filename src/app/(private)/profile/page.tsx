@@ -1,34 +1,98 @@
+import { useState } from 'react';
 import { router } from 'expo-router';
 import {
   Alert,
+  Image as RNImage,
   Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 
+import AppBackground from '@/components/AppBackground';
+import { NavigationButton } from '@/components/buttons';
 import AuthContext from '@/contexts/auth';
 import { signOutUser } from '@/services/auth';
-import {
-  colors,
-  fonts,
-  fontSize,
-  spacing,
-  borderRadius,
-  shadows,
-} from '@/constants/theme';
+import ProfileContext from '@/contexts/profile';
+import { colors } from '@/constants/theme';
+
+import styles from './styles';
+
+type MenuItemProps = {
+  icon: keyof typeof Ionicons.glyphMap;
+  iconBg: string;
+  label: string;
+  onPress?: () => void;
+  trailing?: React.ReactNode;
+};
+
+function MenuItem({
+  icon,
+  iconBg,
+  label,
+  onPress,
+  trailing,
+}: MenuItemProps): JSX.Element {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.menuRow,
+        pressed && onPress && styles.menuRowPressed,
+      ]}
+    >
+      <View style={[styles.menuIconCircle, { backgroundColor: iconBg }]}>
+        <Ionicons
+          name={icon}
+          size={22}
+          color={colors.textInverse}
+          style={styles.iconShadow}
+        />
+      </View>
+      <Text style={styles.menuLabel}>{label}</Text>
+      {trailing ?? (
+        <Ionicons
+          name="chevron-forward"
+          size={20}
+          color={colors.textInverse}
+          style={styles.chevron}
+        />
+      )}
+    </Pressable>
+  );
+}
+
+type ToggleBadgeProps = {
+  isOn: boolean;
+};
+
+function ToggleBadge({ isOn }: ToggleBadgeProps): JSX.Element {
+  return (
+    <View
+      style={[
+        styles.togglePill,
+        isOn ? styles.togglePillOn : styles.togglePillOff,
+      ]}
+    >
+      <Text style={styles.togglePillText}>{isOn ? 'ON' : 'OFF'}</Text>
+    </View>
+  );
+}
 
 export default function Profile(): JSX.Element {
   const { user, setAuth } = AuthContext.useAuth();
 
+  const [soundOn, setSoundOn] = useState(false);
+  const [musicOn, setMusicOn] = useState(true);
+  const { profileImage, avatarSource } = ProfileContext.useProfile();
+
   const firstName =
     user?.user_metadata?.first_name ?? user?.user_metadata?.name ?? '';
   const lastName = user?.user_metadata?.last_name ?? '';
-  const fullName = [firstName, lastName].filter(Boolean).join(' ') || 'User';
   const initials =
     [firstName, lastName]
       .filter(Boolean)
@@ -36,17 +100,27 @@ export default function Profile(): JSX.Element {
       .join('') || '?';
 
   async function performSignOut(): Promise<void> {
-    const { error } = await signOutUser();
-    if (error) {
-      if (Platform.OS === 'web') {
-        alert(error.message);
-      } else {
-        Alert.alert('Error', error.message);
+    try {
+      const { error } = await signOutUser();
+      if (error) {
+        if (Platform.OS === 'web') {
+          alert(error.message);
+        } else {
+          Alert.alert('Error', error.message);
+        }
+        return;
       }
-      return;
+      setAuth(null);
+      router.replace('/(public)/(auth)/signin/page');
+    } catch (e) {
+      const message =
+        e instanceof Error ? e.message : 'Sign out failed. Please try again.';
+      if (Platform.OS === 'web') {
+        alert(message);
+      } else {
+        Alert.alert('Error', message);
+      }
     }
-    setAuth(null);
-    router.replace('/(public)/(auth)/signin/page');
   }
 
   async function handleSignOut(): Promise<void> {
@@ -63,230 +137,105 @@ export default function Profile(): JSX.Element {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        style={styles.scrollView}
-      >
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
+    <AppBackground>
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
+            <NavigationButton
+              onPress={() => router.back()}
+              arrow="arrow-back"
+            />
+            <Text style={styles.headerTitle}>SETTINGS</Text>
+            <View style={styles.avatarCircle}>
+              {profileImage ? (
+                <Image
+                  source={{ uri: profileImage }}
+                  style={styles.avatarImage}
+                  contentFit="cover"
+                />
+              ) : avatarSource ? (
+                <RNImage
+                  source={avatarSource}
+                  style={styles.avatarImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text style={styles.avatarText}>{initials}</Text>
+              )}
+            </View>
+          </View>
+
+          <MenuItem
+            icon="person"
+            iconBg={colors.success}
+            label="Edit Profile"
+            onPress={() => router.push('/(private)/editProfile/page')}
+          />
+
+          <MenuItem
+            icon="color-palette"
+            iconBg={colors.ctaSolid}
+            label="Change Avatar"
+            onPress={() => router.push('/(private)/avatar/page')}
+          />
+
+          <MenuItem
+            icon="volume-high"
+            iconBg={colors.gradientStart}
+            label="Sound"
+            onPress={() => setSoundOn((prev) => !prev)}
+            trailing={<ToggleBadge isOn={soundOn} />}
+          />
+
+          <MenuItem
+            icon="musical-notes"
+            iconBg={colors.gradientEnd}
+            label="Music"
+            onPress={() => setMusicOn((prev) => !prev)}
+            trailing={<ToggleBadge isOn={musicOn} />}
+          />
+
+          <MenuItem
+            icon="pricetag"
+            iconBg={colors.accent}
+            label="Voucher & Stamp Cards"
+          />
+
+          <MenuItem
+            icon="people"
+            iconBg={colors.gradientStart}
+            label="Friends List"
+          />
+
+          <Pressable
+            onPress={handleSignOut}
+            style={({ pressed }) => [
+              styles.menuRow,
+              pressed && styles.menuRowPressed,
+            ]}
+          >
+            <View style={[styles.menuIconCircle, styles.logoutIconCircle]}>
+              <Ionicons
+                name="log-out-outline"
+                size={22}
+                color={colors.error}
+                style={styles.iconShadow}
+              />
+            </View>
+            <Text style={styles.logoutLabel}>Logout</Text>
             <Ionicons
-              name="chevron-back"
-              size={24}
-              color={colors.textPrimary}
+              name="chevron-forward"
+              size={20}
+              color={colors.error}
+              style={styles.chevron}
             />
           </Pressable>
-          <Text style={styles.headerTitle}>Profile</Text>
-          <View style={styles.headerSpacer} />
-        </View>
-
-        <View style={styles.avatarSection}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials}</Text>
-          </View>
-          <Text style={styles.name}>{fullName}</Text>
-          <Text style={styles.email}>{user?.email}</Text>
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.menuItem}>
-            <View
-              style={[
-                styles.menuIcon,
-                { backgroundColor: colors.primaryLight },
-              ]}
-            >
-              <Ionicons
-                name="person-outline"
-                size={20}
-                color={colors.primary}
-              />
-            </View>
-            <Text style={styles.menuLabel}>Account Details</Text>
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={colors.textMuted}
-            />
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.menuItem}>
-            <View
-              style={[styles.menuIcon, { backgroundColor: colors.accentLight }]}
-            >
-              <Ionicons name="trophy-outline" size={20} color={colors.accent} />
-            </View>
-            <Text style={styles.menuLabel}>My Rewards</Text>
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={colors.textMuted}
-            />
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.menuItem}>
-            <View
-              style={[
-                styles.menuIcon,
-                { backgroundColor: colors.backgroundSubtle },
-              ]}
-            >
-              <Ionicons
-                name="settings-outline"
-                size={20}
-                color={colors.textSecondary}
-              />
-            </View>
-            <Text style={styles.menuLabel}>Settings</Text>
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={colors.textMuted}
-            />
-          </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.menuItem}>
-            <View
-              style={[
-                styles.menuIcon,
-                { backgroundColor: colors.backgroundSubtle },
-              ]}
-            >
-              <Ionicons
-                name="help-circle-outline"
-                size={20}
-                color={colors.textSecondary}
-              />
-            </View>
-            <Text style={styles.menuLabel}>Help & Support</Text>
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={colors.textMuted}
-            />
-          </View>
-        </View>
-
-        <Pressable style={styles.signOutButton} onPress={handleSignOut}>
-          <Ionicons name="log-out-outline" size={20} color={colors.error} />
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </Pressable>
-      </ScrollView>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </AppBackground>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: spacing[5],
-    paddingTop: spacing[4],
-    paddingBottom: spacing[10],
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing[8],
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontFamily: fonts.semiBold,
-    fontSize: fontSize.md,
-    color: colors.textPrimary,
-  },
-  headerSpacer: {
-    width: 44,
-  },
-  avatarSection: {
-    alignItems: 'center',
-    marginBottom: spacing[8],
-  },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing[4],
-  },
-  avatarText: {
-    fontFamily: fonts.bold,
-    fontSize: fontSize['2xl'],
-    color: colors.textInverse,
-  },
-  name: {
-    fontFamily: fonts.bold,
-    fontSize: fontSize.xl,
-    color: colors.textPrimary,
-    marginBottom: spacing[1],
-  },
-  email: {
-    fontFamily: fonts.regular,
-    fontSize: fontSize.sm,
-    color: colors.textSecondary,
-  },
-  card: {
-    backgroundColor: colors.backgroundCard,
-    borderRadius: borderRadius.lg,
-    paddingHorizontal: spacing[4],
-    ...shadows.sm,
-    marginBottom: spacing[6],
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing[4],
-    gap: spacing[3],
-  },
-  menuIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: borderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuLabel: {
-    flex: 1,
-    fontFamily: fonts.medium,
-    fontSize: fontSize.base,
-    color: colors.textPrimary,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginLeft: spacing[4] + 36 + spacing[3],
-  },
-  signOutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.errorLight,
-    borderRadius: borderRadius.lg,
-    paddingVertical: spacing[4],
-    gap: spacing[2],
-  },
-  signOutText: {
-    fontFamily: fonts.semiBold,
-    fontSize: fontSize.base,
-    color: colors.error,
-  },
-});

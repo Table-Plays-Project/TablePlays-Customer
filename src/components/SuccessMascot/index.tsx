@@ -6,26 +6,35 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
+  withDelay,
   Easing,
 } from 'react-native-reanimated';
 
+import BubbleHeading from '@/components/BubbleHeading';
 import { ActionButton } from '@/components/buttons';
+import { fontSize } from '@/constants/theme';
 
 import { styles } from './styles';
 
 type SuccessMascotProps = {
   heading: string;
+  subtitle?: string;
   buttonLabel: string;
   onPress: () => void;
 };
 
 export default function SuccessMascot({
   heading,
+  subtitle,
   buttonLabel,
   onPress,
 }: SuccessMascotProps): JSX.Element {
   const translateY = useSharedValue(0);
   const rotate = useSharedValue(0);
+  const textScale = useSharedValue(0);
+  const textOpacity = useSharedValue(0);
+  const buttonOpacity = useSharedValue(0);
+  const buttonTranslateY = useSharedValue(30);
 
   useEffect(() => {
     translateY.value = withRepeat(
@@ -45,6 +54,11 @@ export default function SuccessMascot({
       -1,
       false,
     );
+
+    textScale.value = withDelay(200, withTiming(1, { duration: 200 }));
+    textOpacity.value = withDelay(200, withTiming(1, { duration: 200 }));
+    buttonOpacity.value = withDelay(350, withTiming(1, { duration: 150 }));
+    buttonTranslateY.value = withDelay(350, withTiming(0, { duration: 150 }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -55,8 +69,18 @@ export default function SuccessMascot({
     ],
   }));
 
+  const textAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: textScale.value }],
+    opacity: textOpacity.value,
+  }));
+
+  const buttonAnimStyle = useAnimatedStyle(() => ({
+    opacity: buttonOpacity.value,
+    transform: [{ translateY: buttonTranslateY.value }],
+  }));
+
   return (
-    <View style={styles.card}>
+    <View style={styles.container}>
       <Animated.View style={bounceStyle}>
         <Image
           source={require('@/assets/images/success-star.png')}
@@ -64,8 +88,19 @@ export default function SuccessMascot({
           resizeMode="contain"
         />
       </Animated.View>
-      <Text style={styles.heading}>{heading}</Text>
-      <ActionButton onPress={onPress} text={buttonLabel} />
+
+      <Animated.View style={[styles.headingWrap, textAnimStyle]}>
+        <BubbleHeading
+          text={heading}
+          fontSize={fontSize['4xl']}
+          align="center"
+        />
+        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      </Animated.View>
+
+      <Animated.View style={[styles.buttonWrap, buttonAnimStyle]}>
+        <ActionButton onPress={onPress} text={buttonLabel} />
+      </Animated.View>
     </View>
   );
 }

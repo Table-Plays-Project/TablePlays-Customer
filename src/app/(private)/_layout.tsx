@@ -1,5 +1,11 @@
 import { Slot } from 'expo-router';
 
-export default function PrivateLayout() {
-  return <Slot />;
+import ProfileContext from '@/contexts/profile';
+
+export default function PrivateLayout(): JSX.Element {
+  return (
+    <ProfileContext.ProfileProvider>
+      <Slot />
+    </ProfileContext.ProfileProvider>
+  );
 }

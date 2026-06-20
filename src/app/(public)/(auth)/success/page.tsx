@@ -7,21 +7,45 @@ import SuccessMascot from '@/components/SuccessMascot';
 
 import styles from './styles';
 
-type FlowType = 'signup' | 'password-reset';
+type FlowType = 'signup' | 'password-reset' | 'welcome';
 
 export default function SuccessPage(): JSX.Element {
   const { t } = useTranslation();
   const params = useLocalSearchParams<{ flow: FlowType }>();
   const flow: FlowType =
-    params.flow === 'password-reset' ? 'password-reset' : 'signup';
+    params.flow === 'password-reset'
+      ? 'password-reset'
+      : params.flow === 'welcome'
+        ? 'welcome'
+        : 'signup';
 
-  const heading =
-    flow === 'signup'
-      ? t('pages.success.accountVerified')
-      : t('pages.success.passwordChanged');
+  const content: Record<
+    FlowType,
+    { heading: string; subtitle: string; button: string }
+  > = {
+    signup: {
+      heading: t('pages.success.accountVerified'),
+      subtitle: t('pages.success.accountVerifiedSubtitle'),
+      button: t('pages.success.done'),
+    },
+    'password-reset': {
+      heading: t('pages.success.passwordChanged'),
+      subtitle: t('pages.success.passwordChangedSubtitle'),
+      button: t('pages.success.done'),
+    },
+    welcome: {
+      heading: t('pages.success.welcome'),
+      subtitle: t('pages.success.welcomeSubtitle'),
+      button: t('pages.success.continueBtn'),
+    },
+  };
 
   function handleDone(): void {
-    router.replace('/(public)/(auth)/signin/page');
+    if (flow === 'welcome') {
+      router.replace('/(private)/dashboard/page');
+    } else {
+      router.replace('/(public)/(auth)/signin/page');
+    }
   }
 
   return (
@@ -29,8 +53,9 @@ export default function SuccessPage(): JSX.Element {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.content}>
           <SuccessMascot
-            heading={heading}
-            buttonLabel={t('pages.success.done')}
+            heading={content[flow].heading}
+            subtitle={content[flow].subtitle}
+            buttonLabel={content[flow].button}
             onPress={handleDone}
           />
         </View>

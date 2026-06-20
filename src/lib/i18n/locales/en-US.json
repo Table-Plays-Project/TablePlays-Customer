@@ -90,8 +90,13 @@
     },
     "success": {
       "accountVerified": "Account Verified\nSuccessfully",
-      "passwordChanged": "Password\nChanged",
-      "done": "Done"
+      "accountVerifiedSubtitle": "Your email has been confirmed. You can now sign in and start using TablePlays.",
+      "passwordChanged": "Password Changed\nSuccessfully",
+      "passwordChangedSubtitle": "Your password has been updated. You can now log in with your new password.",
+      "welcome": "Login\nSuccessful",
+      "welcomeSubtitle": "Welcome to TablePlays! Your account is all set up and ready to go.",
+      "done": "Done",
+      "continueBtn": "Continue"
     },
     "notFound": {
       "title": "This screen doesn't exist.",
