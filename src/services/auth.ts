@@ -245,3 +245,29 @@ export async function updateUserProfile(
     return { error: { message: 'Profile update failed. Please try again.' } };
   }
 }
+
+export async function signInAsGuest(): Promise<{
+  userId: string | null;
+  error: AuthError | null;
+}> {
+  try {
+    const { data, error } = await supabase.auth.signInAnonymously();
+    if (error)
+      return {
+        userId: null,
+        error: {
+          message: safeErrorMessage(
+            error,
+            'Failed to join as guest. Please try again.',
+          ),
+        },
+      };
+    return { userId: data.user?.id ?? null, error: null };
+  } catch (e) {
+    console.error('signInAsGuest failed:', e);
+    return {
+      userId: null,
+      error: { message: 'Failed to join as guest. Please try again.' },
+    };
+  }
+}

@@ -1,6 +1,13 @@
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Image as RNImage, Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import {
+  Image as RNImage,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 
@@ -20,8 +27,16 @@ type QuickAction = {
 const QUICK_ACTIONS: QuickAction[] = [
   { icon: 'people', label: 'Friend List' },
   { icon: 'time', label: 'View History' },
-  { icon: 'settings-sharp', label: 'Settings', route: '/(private)/profile/page' },
-  { icon: 'pricetag', label: 'Voucher &\nStamp Cards' },
+  {
+    icon: 'settings-sharp',
+    label: 'Settings',
+    route: '/(private)/profile/page',
+  },
+  {
+    icon: 'pricetag',
+    label: 'Voucher &\nStamp Cards',
+    route: '/(private)/stampCards/page',
+  },
 ];
 
 export default function Dashboard(): JSX.Element {
@@ -92,7 +107,9 @@ export default function Dashboard(): JSX.Element {
             {QUICK_ACTIONS.map((action) => (
               <Pressable
                 key={action.label}
-                onPress={() => action.route && router.push(action.route as never)}
+                onPress={() =>
+                  action.route && router.push(action.route as never)
+                }
                 style={({ pressed }) => [
                   styles.actionCard,
                   pressed && styles.actionCardPressed,
@@ -112,8 +129,14 @@ export default function Dashboard(): JSX.Element {
           </View>
 
           <View style={styles.ctaSection}>
-            <ActionButton onPress={() => {}} text="HOST GAME" />
-            <SecondaryButton onPress={() => {}} text="JOIN GAME" />
+            <ActionButton
+              onPress={() => router.push('/(private)/selectGame/page')}
+              text="HOST GAME"
+            />
+            <SecondaryButton
+              onPress={() => router.push('/(private)/selectGame/page')}
+              text="JOIN GAME"
+            />
           </View>
         </ScrollView>
       </SafeAreaView>

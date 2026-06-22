@@ -1,10 +1,15 @@
 import { ReactNode } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors } from '@/constants/theme';
 
 import { styles } from './styles';
+
+// Standard Android "sw600dp" tablet breakpoint, also a safe cutoff for
+// iPad mini and up — shortest screen dimension, so it holds in either
+// orientation.
+const TABLET_BREAKPOINT = 600;
 
 type AppBackgroundProps = {
   children?: ReactNode;
@@ -13,6 +18,9 @@ type AppBackgroundProps = {
 export default function AppBackground({
   children,
 }: AppBackgroundProps): JSX.Element {
+  const { width, height } = useWindowDimensions();
+  const isTablet = Math.min(width, height) >= TABLET_BREAKPOINT;
+
   return (
     <View style={styles.root}>
       <View style={styles.gradientFallback} />
@@ -23,7 +31,11 @@ export default function AppBackground({
         style={StyleSheet.absoluteFill}
       />
       <Image
-        source={require('@/assets/images/app-background.png')}
+        source={
+          isTablet
+            ? require('@/assets/images/app-background-tablet.jpeg')
+            : require('@/assets/images/app-background.png')
+        }
         style={styles.backgroundImage}
         resizeMode="cover"
       />

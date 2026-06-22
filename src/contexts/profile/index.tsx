@@ -100,10 +100,18 @@ function ProfileProvider({ children }: { children: ReactNode }): JSX.Element {
     [imageKey, avatarKey],
   );
 
-  const avatarSource = avatarId ? getAvatarById(avatarId)?.source ?? null : null;
+  const avatarSource = avatarId
+    ? (getAvatarById(avatarId)?.source ?? null)
+    : null;
 
   const value = useMemo(
-    () => ({ avatarId, avatarSource, setAvatarId, profileImage, setProfileImage }),
+    () => ({
+      avatarId,
+      avatarSource,
+      setAvatarId,
+      profileImage,
+      setProfileImage,
+    }),
     [avatarId, avatarSource, setAvatarId, profileImage, setProfileImage],
   );
 

@@ -28,7 +28,11 @@ export default function BubbleHeading({
 }: BubbleHeadingProps): JSX.Element {
   const sizeStyle: TextStyle = {
     fontSize,
-    lineHeight: fontSize * 1.05,
+    // Baloo2_800ExtraBold's glyph metrics run taller than its nominal
+    // fontSize. 1.05x is enough for a single line, but a wrapped second
+    // line bleeds past its line box and overlaps whatever follows — needs
+    // real headroom, not just a hairline buffer.
+    lineHeight: fontSize * 1.25,
     textAlign: align,
   };
 

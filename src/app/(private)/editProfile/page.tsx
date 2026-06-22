@@ -35,7 +35,8 @@ export default function EditProfile(): JSX.Element {
   const [lastName, setLastName] = useState(
     user?.user_metadata?.last_name ?? '',
   );
-  const { profileImage, setProfileImage, avatarSource } = ProfileContext.useProfile();
+  const { profileImage, setProfileImage, avatarSource } =
+    ProfileContext.useProfile();
   const [localImage, setLocalImage] = useState<string | null>(profileImage);
   const [error, setError] = useState<string | null>(null);
   const [lightboxVisible, setLightboxVisible] = useState(false);
@@ -138,7 +139,11 @@ export default function EditProfile(): JSX.Element {
         >
           <View style={styles.header}>
             <NavigationButton
-              onPress={() => router.canGoBack() ? router.back() : router.replace('/(private)/profile/page')}
+              onPress={() =>
+                router.canGoBack()
+                  ? router.back()
+                  : router.replace('/(private)/profile/page')
+              }
               arrow="arrow-back"
             />
             <Text style={styles.headerTitle}>EDIT PROFILE</Text>
@@ -149,7 +154,9 @@ export default function EditProfile(): JSX.Element {
 
           <View style={styles.profileImageSection}>
             <Pressable
-              onPress={() => (displayImage || avatarSource) && setLightboxVisible(true)}
+              onPress={() =>
+                (displayImage || avatarSource) && setLightboxVisible(true)
+              }
               style={styles.profileImageContainer}
             >
               {displayImage ? (

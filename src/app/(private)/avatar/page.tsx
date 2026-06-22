@@ -34,7 +34,11 @@ export default function AvatarPicker(): JSX.Element {
         >
           <View style={styles.header}>
             <NavigationButton
-              onPress={() => router.canGoBack() ? router.back() : router.replace('/(private)/profile/page')}
+              onPress={() =>
+                router.canGoBack()
+                  ? router.back()
+                  : router.replace('/(private)/profile/page')
+              }
               arrow="arrow-back"
             />
           </View>

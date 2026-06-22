@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { SafeAreaView, View } from 'react-native';
+import { SafeAreaView, ScrollView } from 'react-native';
 
 import AppBackground from '@/components/AppBackground';
 import SuccessMascot from '@/components/SuccessMascot';
@@ -51,14 +51,17 @@ export default function SuccessPage(): JSX.Element {
   return (
     <AppBackground>
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.content}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
           <SuccessMascot
             heading={content[flow].heading}
             subtitle={content[flow].subtitle}
             buttonLabel={content[flow].button}
             onPress={handleDone}
           />
-        </View>
+        </ScrollView>
       </SafeAreaView>
     </AppBackground>
   );

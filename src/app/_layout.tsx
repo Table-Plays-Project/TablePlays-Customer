@@ -125,10 +125,17 @@ function MainLayout(): JSX.Element {
         return;
       }
       if (_event === 'SIGNED_IN') {
-        if (!session?.user?.email_confirmed_at) {
+        const isAnonymous = session?.user?.is_anonymous === true;
+        if (!isAnonymous && !session?.user?.email_confirmed_at) {
           return;
         }
         setAuth(session.user as CurrentUser);
+        if (isAnonymous) {
+          // Guest sign-in is initiated from a specific join/host game-session
+          // screen, which navigates explicitly once this resolves — never
+          // force a global redirect for a guest mid-join-flow.
+          return;
+        }
         const isGoogle = session.user.app_metadata?.provider === 'google';
         if (isGoogle) {
           const uid = session.user.id;
@@ -150,7 +157,13 @@ function MainLayout(): JSX.Element {
         return;
       }
       if (_event === 'INITIAL_SESSION') {
-        if (session && session.user?.email_confirmed_at) {
+        const isAnonymous = session?.user?.is_anonymous === true;
+        if (session && isAnonymous) {
+          // Reopened app with an existing guest session — keep the session
+          // alive but don't force any redirect until reconnect/lobby
+          // reconciliation is built.
+          setAuth(session.user as CurrentUser);
+        } else if (session && session.user?.email_confirmed_at) {
           setAuth(session.user as CurrentUser);
           router.replace('/(private)/dashboard/page');
         } else {

@@ -7,8 +7,9 @@ export const styles = StyleSheet.create({
     paddingHorizontal: spacing[5],
   },
   mascotImage: {
-    width: 320,
-    height: 320,
+    width: '85%',
+    maxWidth: 320,
+    aspectRatio: 1,
   },
   headingWrap: {
     marginTop: spacing[2],

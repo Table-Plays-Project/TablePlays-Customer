@@ -72,6 +72,33 @@
     "updatePassword": {
       "title": "Atualizar senha",
       "button": "Atualizar"
+    },
+    "stampCards": {
+      "title": "VOUCHERS E CARTOES DE SELO",
+      "forYou": "PARA VOCE",
+      "stampCardFrom": "CARTAO DE SELO DE —",
+      "back": "VOLTAR"
+    },
+    "spinWheel": {
+      "title": "GIRE A ROLETA",
+      "spin": "GIRAR",
+      "nextSpin": "PROXIMO GIRO EM...",
+      "tapToSpin": "TOQUE GIRAR PARA JOGAR",
+      "paysTheBill": "{{name}} paga a conta!",
+      "stampsIssued": "Selos emitidos para {{count}} jogadores",
+      "playAgain": "JOGAR NOVAMENTE",
+      "exit": "SAIR",
+      "back": "Voltar"
+    },
+    "stampCard": {
+      "heading": "CARTAO DE SELO",
+      "defaultUser": "Usuario",
+      "stamp": "Selo",
+      "completed": "completo",
+      "empty": "vazio",
+      "stampProgress": "{{stamps}} de {{totalSlots}} selos coletados",
+      "markStamp": "MARCAR O SELO",
+      "giveNewCard": "DAR UM NOVO CARTAO DE SELO"
     }
   }
 }

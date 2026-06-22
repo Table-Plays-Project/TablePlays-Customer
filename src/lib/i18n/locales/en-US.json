@@ -111,6 +111,33 @@
       "title": "Set new password",
       "subtitle": "Enter your new password below.",
       "button": "Update Password"
+    },
+    "stampCards": {
+      "title": "VOUCHER & STAMP CARDS",
+      "forYou": "FOR YOU",
+      "stampCardFrom": "STAMP CARD FROM —",
+      "back": "BACK"
+    },
+    "spinWheel": {
+      "title": "SPIN THE WHEEL",
+      "spin": "SPIN",
+      "nextSpin": "NEXT SPIN IN...",
+      "tapToSpin": "TAP SPIN TO PLAY",
+      "paysTheBill": "{{name}} pays the bill!",
+      "stampsIssued": "Stamps issued to {{count}} players",
+      "playAgain": "PLAY AGAIN",
+      "exit": "EXIT",
+      "back": "Back"
+    },
+    "stampCard": {
+      "heading": "STAMP CARD",
+      "defaultUser": "User",
+      "stamp": "Stamp",
+      "completed": "completed",
+      "empty": "empty",
+      "stampProgress": "{{stamps}} of {{totalSlots}} stamps collected",
+      "markStamp": "MARK THE STAMP",
+      "giveNewCard": "GIVE A NEW STAMP CARD"
     }
   }
 }
