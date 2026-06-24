@@ -28,6 +28,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -42,21 +43,9 @@ import {
   WHEEL_COLORS,
   WHEEL_FONTS,
 } from './wheelConfig';
-import type { WheelPlayer } from './types';
+import type { SpinWheelScreenProps } from './types';
 import { SpinWheel } from './SpinWheel';
 import { useWheelSound } from './useWheelSound';
-
-export interface SpinWheelScreenProps {
-  players: WheelPlayer[];
-  loading: boolean;
-  error: boolean;
-  requestWinner: () => Promise<number>;
-  onBack: () => void;
-  onRetry?: () => void;
-  /** Provide to show the +/- stepper. In production the count is the joined
-      players, so usually this is omitted and the wheel reflects `players`. */
-  onChangeCount?: (next: number) => void;
-}
 
 /* decorative scattered shapes — low-opacity background texture.
    NOTE: this duplicates UI_SYSTEM's DecorativeShapesLayer; replace with your
@@ -158,11 +147,18 @@ export function SpinWheelScreen({
   onBack,
   onRetry,
   onChangeCount,
+  autoSpin,
+  canSpin,
+  spinKey,
+  onResult,
+  onGameEnd,
 }: SpinWheelScreenProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const { playTick, playWin, startTicking, muted, toggleMute } =
     useWheelSound();
   const count = players.length;
+  const wheelDisplaySize = Math.min(screenWidth * 0.85, 344);
   const spinSoundStartedRef = React.useRef(false);
 
   const handleTick = useCallback((): void => {
@@ -272,6 +268,12 @@ export function SpinWheelScreen({
             onTick={handleTick}
             onWin={handleWin}
             onTickStop={() => {}}
+            autoSpin={autoSpin}
+            canSpin={canSpin}
+            spinKey={spinKey}
+            onResult={onResult}
+            onGameEnd={onGameEnd}
+            size={wheelDisplaySize}
           />
         )}
       </View>
@@ -337,11 +339,10 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: WHEEL_FONTS.display,
     fontWeight: '800',
-    fontSize: 25,
+    fontSize: 22,
     letterSpacing: 0.5,
-    lineHeight: 26,
+    lineHeight: 28,
     color: WHEEL_COLORS.gold,
-    // -webkit-text-stroke isn't available in RN; the 3D ink drop is approximated.
     textShadowColor: 'rgba(42,27,74,0.55)',
     textShadowOffset: { width: 0, height: 4 },
     textShadowRadius: 0.5,
@@ -349,16 +350,16 @@ const styles = StyleSheet.create({
   subtitle: {
     fontFamily: WHEEL_FONTS.body,
     fontWeight: '700',
-    fontSize: 12,
+    fontSize: 11,
     letterSpacing: 3,
     color: WHEEL_COLORS.white,
     opacity: 0.85,
-    marginTop: 5,
+    marginTop: 4,
   },
   wheelArea: {
     position: 'absolute',
-    top: 128,
-    bottom: 150,
+    top: 110,
+    bottom: 130,
     left: 0,
     right: 0,
     alignItems: 'center',

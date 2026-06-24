@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import {
   Alert,
   Platform,
@@ -12,22 +12,28 @@ import { Ionicons } from '@expo/vector-icons';
 
 import AppBackground from '@/components/AppBackground';
 import BubbleHeading from '@/components/BubbleHeading';
-import {
-  ActionButton,
-  SecondaryButton,
-  NavigationButton,
-} from '@/components/buttons';
+import { ActionButton, NavigationButton } from '@/components/buttons';
 import { MyAppTextInput } from '@/components/inputs';
 import AuthContext from '@/contexts/auth';
+import ProfileContext from '@/contexts/profile';
 import { signInAsGuest } from '@/services/auth';
-import { createGameSession, joinGameSession } from '@/services/gameSessions';
+import { createGameSession, joinGameSession } from '@/services/game';
 import { colors } from '@/constants/theme';
 
 import styles from './styles';
 
 export default function JoinSessionPage(): JSX.Element {
   const { user } = AuthContext.useAuth();
-  const [playerName, setPlayerName] = useState('');
+  const { avatarId } = ProfileContext.useProfile();
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const isJoinMode = mode === 'join';
+
+  const accountName =
+    user?.user_metadata?.first_name ??
+    user?.user_metadata?.name ??
+    '';
+
+  const [playerName, setPlayerName] = useState(accountName);
   const [roomCode, setRoomCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +72,8 @@ export default function JoinSessionPage(): JSX.Element {
         'customer',
         'spin_wheel',
         playerName.trim(),
+        null,
+        avatarId,
       );
       if (createError || !sessionId) {
         showError(createError?.message ?? 'Failed to create session.');
@@ -101,6 +109,7 @@ export default function JoinSessionPage(): JSX.Element {
       const { sessionId, error: joinError } = await joinGameSession(
         roomCode.trim(),
         playerName.trim(),
+        avatarId,
       );
       if (joinError || !sessionId) {
         showError(joinError?.message ?? 'Failed to join session.');
@@ -138,7 +147,10 @@ export default function JoinSessionPage(): JSX.Element {
           </View>
 
           <View style={styles.headingWrap}>
-            <BubbleHeading text="HOST OR JOIN" align="center" />
+            <BubbleHeading
+              text={isJoinMode ? 'JOIN GAME' : 'HOST GAME'}
+              align="center"
+            />
           </View>
 
           {error ? (
@@ -160,31 +172,28 @@ export default function JoinSessionPage(): JSX.Element {
             onChangeText={setPlayerName}
           />
 
-          <ActionButton
-            onPress={handleHost}
-            text="HOST GAME"
-            disabled={loading}
-          />
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <MyAppTextInput
-            variant="pill"
-            label="Room Code"
-            placeholder="Room Code"
-            value={roomCode}
-            onChangeText={(text) => setRoomCode(text.toUpperCase())}
-          />
-
-          <SecondaryButton
-            onPress={handleJoin}
-            text="JOIN GAME"
-            disabled={loading}
-          />
+          {isJoinMode ? (
+            <>
+              <MyAppTextInput
+                variant="pill"
+                label="Room Code"
+                placeholder="Room Code"
+                value={roomCode}
+                onChangeText={(text) => setRoomCode(text.toUpperCase())}
+              />
+              <ActionButton
+                onPress={handleJoin}
+                text="JOIN GAME"
+                disabled={loading}
+              />
+            </>
+          ) : (
+            <ActionButton
+              onPress={handleHost}
+              text="HOST GAME"
+              disabled={loading}
+            />
+          )}
         </ScrollView>
       </SafeAreaView>
     </AppBackground>

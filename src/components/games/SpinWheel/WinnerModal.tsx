@@ -43,6 +43,7 @@ function WinnerModalComponent({
   winner,
   onSpinAgain,
   onClose,
+  canSpin = true,
 }: WinnerModalProps): React.JSX.Element | null {
   const shown = useSharedValue(0);
 
@@ -76,15 +77,17 @@ function WinnerModalComponent({
       pointerEvents={visible ? 'auto' : 'none'}
     >
       <BlurView intensity={18} tint="dark" style={StyleSheet.absoluteFill} />
-      <Pressable
-        style={StyleSheet.absoluteFill}
-        onPress={onClose}
-        accessibilityRole="button"
-        accessibilityLabel={'Dismiss'}
-      />
+      {canSpin ? (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel={'Dismiss'}
+        />
+      ) : null}
 
       <Animated.View style={[styles.card, cardStyle]}>
-        <Text style={styles.crown}>{'★  WINNER  ★'}</Text>
+        <Text style={styles.crown}>{'★  PAYS THE BILL  ★'}</Text>
 
         <View style={styles.avatarHalo}>
           <View style={styles.avatarInner}>
@@ -106,21 +109,40 @@ function WinnerModalComponent({
         <Text style={styles.name} numberOfLines={1} maxFontSizeMultiplier={1.2}>
           {winner.name}
         </Text>
-        <Text style={styles.sub}>{'GOES FIRST!'}</Text>
+        <Text style={styles.sub}>{'PAYS THE BILL!'}</Text>
 
-        <Pressable
-          style={({ pressed }) => [
-            styles.again,
-            pressed && styles.againPressed,
-          ]}
-          onPress={onSpinAgain}
-          accessibilityRole="button"
-          accessibilityLabel={'Spin Again'}
-        >
-          <Text style={styles.againLabel} maxFontSizeMultiplier={1.2}>
-            {'Spin Again'}
-          </Text>
-        </Pressable>
+        {canSpin ? (
+          <Pressable
+            style={({ pressed }) => [
+              styles.again,
+              pressed && styles.againPressed,
+            ]}
+            onPress={onSpinAgain}
+            accessibilityRole="button"
+            accessibilityLabel="Spin Again"
+          >
+            <Text style={styles.againLabel} maxFontSizeMultiplier={1.2}>
+              {'Spin Again'}
+            </Text>
+          </Pressable>
+        ) : (
+          <>
+            <Text style={styles.waitingLabel} maxFontSizeMultiplier={1.2}>
+              {'Waiting for host...'}
+            </Text>
+            <Pressable
+              style={({ pressed }) => [
+                styles.leaveBtn,
+                pressed && styles.leaveBtnPressed,
+              ]}
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Leave Game"
+            >
+              <Text style={styles.leaveLabel}>{'Leave Game'}</Text>
+            </Pressable>
+          </>
+        )}
       </Animated.View>
     </Animated.View>
   );
@@ -230,6 +252,37 @@ const styles = StyleSheet.create({
   againPressed: {
     transform: [{ translateY: 5 }],
     shadowOffset: { width: 0, height: 2 },
+  },
+  leaveBtn: {
+    marginTop: 16,
+    width: '100%',
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: '#F3F3F5',
+    borderWidth: 1,
+    borderColor: '#E0E0E4',
+  },
+  leaveBtnPressed: {
+    backgroundColor: '#E8E8EC',
+    transform: [{ scale: 0.98 }],
+  },
+  leaveLabel: {
+    fontFamily: WHEEL_FONTS.display,
+    fontWeight: '800',
+    fontSize: 15,
+    letterSpacing: 0.3,
+    color: '#666',
+  },
+  waitingLabel: {
+    fontFamily: WHEEL_FONTS.displaySemi,
+    fontWeight: '700',
+    fontSize: 14,
+    letterSpacing: 1,
+    color: '#9E5DEF',
+    marginTop: 20,
+    textAlign: 'center',
   },
   againLabel: {
     fontFamily: WHEEL_FONTS.display,

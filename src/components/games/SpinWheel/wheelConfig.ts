@@ -135,4 +135,4 @@ export const WHEEL_FONTS = {
 } as const;
 
 export const PLAYER_MIN = 2;
-export const PLAYER_MAX = 6;
+export const PLAYER_MAX = 4;

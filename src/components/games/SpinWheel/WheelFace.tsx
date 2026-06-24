@@ -58,6 +58,7 @@ interface SegmentModel {
   initials: string;
   name: string;
   avatarUri: string | null;
+  avatarSource: number | null;
 }
 
 function WheelFaceComponent({
@@ -101,6 +102,7 @@ function WheelFaceComponent({
         initials: player.name.slice(0, 1).toUpperCase(),
         name: player.name,
         avatarUri: player.avatarUri,
+        avatarSource: player.avatarSource,
       };
     });
   }, [players, count]);
@@ -175,68 +177,25 @@ function WheelFaceComponent({
               fill={WHEEL_COLORS.white}
             />
 
-            {s.avatarUri ? (
-              <SvgImage
-                x={s.ax - s.avatarRadius}
-                y={s.ay - s.avatarRadius}
-                width={s.avatarRadius * 2}
-                height={s.avatarRadius * 2}
-                href={{ uri: s.avatarUri }}
-                preserveAspectRatio="xMidYMid slice"
-                clipPath={`url(#clip${s.index})`}
-              />
-            ) : (
-              <>
-                <Circle
-                  cx={s.ax}
-                  cy={s.ay}
-                  r={s.avatarRadius}
-                  fill={`url(#a${s.index})`}
-                />
-                <SvgText
-                  x={s.ax}
-                  y={s.ay}
-                  dy={s.avatarRadius * 1.05 * 0.34}
-                  textAnchor="middle"
-                  fontFamily={WHEEL_FONTS.display}
-                  fontWeight="800"
-                  fontSize={s.avatarRadius * 1.05}
-                  fill={WHEEL_COLORS.white}
-                >
-                  {s.initials}
-                </SvgText>
-              </>
-            )}
-
-            {/* name — two-pass outline (stroke behind, fill on top) for a clean
-                bubble edge across iOS + Android (paint-order isn't reliable). */}
+            <Circle
+              cx={s.ax}
+              cy={s.ay}
+              r={s.avatarRadius}
+              fill={`url(#a${s.index})`}
+            />
             <SvgText
-              x={s.nx}
-              y={s.ny}
-              dy={s.nameSize * 0.34}
+              x={s.ax}
+              y={s.ay}
+              dy={s.avatarRadius * 1.05 * 0.34}
               textAnchor="middle"
               fontFamily={WHEEL_FONTS.display}
               fontWeight="800"
-              fontSize={s.nameSize}
-              fill="none"
-              stroke={WHEEL_COLORS.nameStroke}
-              strokeWidth={s.nameSize * 0.13 * 2}
-              strokeLinejoin="round"
-            >
-              {s.name}
-            </SvgText>
-            <SvgText
-              x={s.nx}
-              y={s.ny}
-              dy={s.nameSize * 0.34}
-              textAnchor="middle"
-              fontFamily={WHEEL_FONTS.display}
-              fontWeight="800"
-              fontSize={s.nameSize}
+              fontSize={s.avatarRadius * 1.05}
               fill={WHEEL_COLORS.white}
             >
-              {s.name}
+              {s.initials}
             </SvgText>
+
           </G>
         ))}
       </G>

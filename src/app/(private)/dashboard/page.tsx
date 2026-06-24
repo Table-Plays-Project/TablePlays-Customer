@@ -25,18 +25,22 @@ type QuickAction = {
 };
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { icon: 'people', label: 'Friend List' },
-  { icon: 'time', label: 'View History' },
   {
-    icon: 'settings-sharp',
-    label: 'Settings',
-    route: '/(private)/profile/page',
+    icon: 'game-controller',
+    label: 'Play\nGames',
+    route: '/(private)/selectGame/page',
   },
   {
     icon: 'pricetag',
     label: 'Voucher &\nStamp Cards',
     route: '/(private)/stampCards/page',
   },
+  {
+    icon: 'settings-sharp',
+    label: 'Settings',
+    route: '/(private)/profile/page',
+  },
+  { icon: 'time', label: 'View History' },
 ];
 
 export default function Dashboard(): JSX.Element {
@@ -134,7 +138,12 @@ export default function Dashboard(): JSX.Element {
               text="HOST GAME"
             />
             <SecondaryButton
-              onPress={() => router.push('/(private)/selectGame/page')}
+              onPress={() =>
+                router.push({
+                  pathname: '/(private)/joinSession/page',
+                  params: { mode: 'join' },
+                } as never)
+              }
               text="JOIN GAME"
             />
           </View>

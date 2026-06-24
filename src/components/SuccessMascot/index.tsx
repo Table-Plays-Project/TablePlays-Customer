@@ -32,10 +32,10 @@ export default function SuccessMascot({
   const buttonTranslateY = useSharedValue(30);
 
   useEffect(() => {
-    textScale.value = withDelay(200, withTiming(1, { duration: 200 }));
-    textOpacity.value = withDelay(200, withTiming(1, { duration: 200 }));
-    buttonOpacity.value = withDelay(350, withTiming(1, { duration: 150 }));
-    buttonTranslateY.value = withDelay(350, withTiming(0, { duration: 150 }));
+    textScale.value = withDelay(500, withTiming(1, { duration: 300 }));
+    textOpacity.value = withDelay(500, withTiming(1, { duration: 300 }));
+    buttonOpacity.value = withDelay(3000, withTiming(1, { duration: 200 }));
+    buttonTranslateY.value = withDelay(3000, withTiming(0, { duration: 200 }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

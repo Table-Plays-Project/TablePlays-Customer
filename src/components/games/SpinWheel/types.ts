@@ -12,6 +12,7 @@ export interface WheelPlayer {
   id: string;
   name: string;
   avatarUri: string | null;
+  avatarSource: number | null;
 }
 
 /** Result returned by the authoritative spin RPC (CODE_RULES.md §10). */
@@ -38,6 +39,31 @@ export interface SpinWheelProps {
   onResult?: (winnerIndex: number) => void;
   /** Display size of the wheel square in px. Defaults to 344. */
   size?: number;
+  /** When true, the spin triggers automatically on mount (multiplayer —
+   *  the winner is already determined server-side, no button tap needed). */
+  autoSpin?: boolean;
+  /** When false, the center SPIN button is disabled (joiner devices —
+   *  they watch the wheel but only the host triggers the spin). */
+  canSpin?: boolean;
+  /** Unique key per spin (e.g. spin_started_at). When this changes,
+   *  the joiner's modal auto-dismisses and a new spin animation starts. */
+  spinKey?: string | null;
+  onGameEnd?: () => void;
+}
+
+export interface SpinWheelScreenProps {
+  players: WheelPlayer[];
+  loading: boolean;
+  error: boolean;
+  requestWinner: () => Promise<number>;
+  onBack: () => void;
+  onRetry?: () => void;
+  onChangeCount?: (next: number) => void;
+  autoSpin?: boolean;
+  canSpin?: boolean;
+  spinKey?: string | null;
+  onResult?: (payerIndex: number) => void;
+  onGameEnd?: () => void;
 }
 
 export interface WheelFaceProps {
@@ -61,4 +87,5 @@ export interface WinnerModalProps {
   winner: WheelPlayer | null;
   onSpinAgain: () => void;
   onClose: () => void;
+  canSpin?: boolean;
 }

@@ -68,15 +68,13 @@ export function useWheelSound(): WheelSound {
       mounted = false;
       activeRef.current = false;
       tickPoolRef.current.forEach((s) => {
-        try {
-          s.unloadAsync();
-        } catch (_e) {}
+        s.stopAsync().catch(() => {});
+        s.unloadAsync().catch(() => {});
       });
       tickPoolRef.current = [];
       if (winRef.current) {
-        try {
-          winRef.current.unloadAsync();
-        } catch (_e) {}
+        winRef.current.stopAsync().catch(() => {});
+        winRef.current.unloadAsync().catch(() => {});
         winRef.current = null;
       }
     };

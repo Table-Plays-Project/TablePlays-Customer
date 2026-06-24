@@ -19,7 +19,7 @@ const GAMES: GameOption[] = [
   {
     icon: 'sync-circle',
     label: 'Spinning\nWheel',
-    route: '/(private)/spinWheel/page',
+    route: '/(private)/joinSession/page',
   },
   { icon: 'refresh-circle', label: 'Reverse\nWheel' },
   { icon: 'flash', label: 'Blinking\nLight' },
@@ -62,7 +62,13 @@ export default function SelectGame(): JSX.Element {
               return (
                 <Pressable
                   key={game.label}
-                  onPress={() => isActive && router.push(game.route as never)}
+                  onPress={() =>
+                    isActive &&
+                    router.push({
+                      pathname: game.route,
+                      params: { mode: 'host' },
+                    } as never)
+                  }
                   style={({ pressed }) => [
                     styles.gameCard,
                     !isActive && styles.gameCardDisabled,

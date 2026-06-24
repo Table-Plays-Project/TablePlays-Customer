@@ -22,6 +22,7 @@ import React, {
   useState,
 } from 'react';
 import {
+  Image as RNImage,
   LayoutChangeEvent,
   Pressable,
   StyleSheet,
@@ -38,9 +39,9 @@ import Svg, {
 import Animated, {
   cancelAnimation,
   Easing,
+  ReduceMotion,
   runOnJS,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
@@ -237,15 +238,26 @@ function SpinWheelComponent({
   onTickStop,
   onResult,
   size = WHEEL_GEOMETRY.DEFAULT_DISPLAY_SIZE,
+  autoSpin = false,
+  canSpin = true,
+  spinKey = null,
+  onGameEnd,
 }: SpinWheelProps): React.JSX.Element {
   const count = players.length;
   const rotation = useSharedValue(0);
   const restAngle = useRef(0);
-  const reduceMotion = useReducedMotion();
 
   const [isSpinning, setIsSpinning] = useState(false);
   const [winnerIndex, setWinnerIndex] = useState<number | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const prevCountRef = useRef(count);
+  if (count !== prevCountRef.current) {
+    prevCountRef.current = count;
+    if (winnerIndex !== null && winnerIndex >= count) {
+      setWinnerIndex(null);
+      setModalVisible(false);
+    }
+  }
   const [confettiKey, setConfettiKey] = useState(0);
   const [spinError, setSpinError] = useState(false);
   const [layout, setLayout] = useState<{ w: number; h: number }>({
@@ -308,7 +320,7 @@ function SpinWheelComponent({
   const handleComplete = useCallback(
     (idx: number, to: number): void => {
       stopTickTimer();
-      restAngle.current = ((to % 360) + 360) % 360;
+      restAngle.current = to;
       setIsSpinning(false);
       onWin();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
@@ -318,11 +330,11 @@ function SpinWheelComponent({
       if (modalTimer.current) clearTimeout(modalTimer.current);
       modalTimer.current = setTimeout(
         () => setModalVisible(true),
-        reduceMotion ? 0 : WHEEL_MOTION.WINNER_MODAL_DELAY_MS,
+        WHEEL_MOTION.WINNER_MODAL_DELAY_MS,
       );
       onResult?.(idx);
     },
-    [onWin, onResult, reduceMotion, stopTickTimer],
+    [onWin, onResult, stopTickTimer],
   );
 
   const runSpinAnimation = useCallback(
@@ -331,18 +343,14 @@ function SpinWheelComponent({
       const mid = (idx + 0.5) * seg;
       const targetMod = ((-mid % 360) + 360) % 360;
       const curMod = ((restAngle.current % 360) + 360) % 360;
-      const turns =
-        WHEEL_MOTION.MIN_TURNS +
-        Math.floor(
-          Math.random() * (WHEEL_MOTION.MAX_TURNS - WHEEL_MOTION.MIN_TURNS + 1),
-        );
-      const jitter = (Math.random() - 0.5) * seg * WHEEL_MOTION.JITTER_RATIO;
+      // Fixed turns + zero jitter — both devices must compute identical
+      // final angles from the same payer_index, otherwise narrow segments
+      // (4+ players) can visually land on different segments across devices.
+      const turns = WHEEL_MOTION.MIN_TURNS;
       const delta =
-        turns * 360 + ((((targetMod - curMod) % 360) + 360) % 360) + jitter;
+        turns * 360 + ((((targetMod - curMod) % 360) + 360) % 360);
       const to = restAngle.current + delta;
-      const duration = reduceMotion
-        ? WHEEL_MOTION.REDUCED_MOTION_DURATION_MS
-        : WHEEL_MOTION.DURATION_MS;
+      const duration = WHEEL_MOTION.DURATION_MS;
 
       startTickTimer(delta, duration, () => {
         if (onTickStop) onTickStop();
@@ -350,14 +358,18 @@ function SpinWheelComponent({
 
       rotation.value = withTiming(
         to,
-        { duration, easing: Easing.inOut(Easing.cubic) },
+        {
+          duration,
+          easing: Easing.inOut(Easing.cubic),
+          reduceMotion: ReduceMotion.Never,
+        },
         (finished) => {
           'worklet';
           if (finished) runOnJS(handleComplete)(idx, to);
         },
       );
     },
-    [count, reduceMotion, rotation, handleComplete, startTickTimer, onTickStop],
+    [count, rotation, handleComplete, startTickTimer, onTickStop],
   );
 
   const spin = useCallback(async (): Promise<void> => {
@@ -383,7 +395,10 @@ function SpinWheelComponent({
     }
   }, [isSpinning, requestWinner, count, runSpinAnimation]);
 
-  const closeModal = useCallback((): void => setModalVisible(false), []);
+  const closeModal = useCallback((): void => {
+    setModalVisible(false);
+    if (!canSpin && onGameEnd) onGameEnd();
+  }, [canSpin, onGameEnd]);
 
   const spinAgain = useCallback((): void => {
     setModalVisible(false);
@@ -392,6 +407,23 @@ function SpinWheelComponent({
       void spin();
     }, WHEEL_MOTION.RESPIN_DELAY_MS);
   }, [spin]);
+
+  const lastSpinKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      autoSpin &&
+      count >= 2 &&
+      spinKey &&
+      spinKey !== lastSpinKey.current &&
+      layout.w > 0
+    ) {
+      lastSpinKey.current = spinKey;
+      setModalVisible(false);
+      setWinnerIndex(null);
+      setIsSpinning(false);
+      setTimeout(() => void spin(), 800);
+    }
+  }, [autoSpin, count, spin, spinKey, layout.w]);
 
   useEffect(() => {
     return () => {
@@ -432,6 +464,52 @@ function SpinWheelComponent({
             style={[{ width: wheelSize, height: wheelSize }, wheelStyle]}
           >
             <WheelFace players={players} size={wheelSize} />
+            {players.map((player, i) => {
+              const uri = player.avatarUri ?? null;
+              if (!uri) return null;
+
+              const seg = 360 / count;
+              const mid = (i + 0.5) * seg;
+              const rad = (mid * Math.PI) / 180;
+              const avatarR = count <= 3 ? 30 : count <= 4 ? 26 : 23;
+              const scale = wheelSize / WHEEL_GEOMETRY.VIEWBOX;
+              const posR = WHEEL_GEOMETRY.FACE_RADIUS * WHEEL_GEOMETRY.AVATAR_RADIUS_RATIO;
+              const cx = (WHEEL_GEOMETRY.CENTER + posR * Math.sin(rad)) * scale;
+              const cy = (WHEEL_GEOMETRY.CENTER - posR * Math.cos(rad)) * scale;
+              const r = avatarR * scale;
+
+              return (
+                <View
+                  key={player.id}
+                  style={{
+                    position: 'absolute',
+                    left: cx - r,
+                    top: cy - r,
+                    width: r * 2,
+                    height: r * 2,
+                    borderRadius: r,
+                    overflow: 'hidden',
+                    backgroundColor: 'transparent',
+                  }}
+                >
+                  <RNImage
+                    source={{ uri }}
+                    style={{
+                      width: r * 2,
+                      height: r * 2,
+                    }}
+                    resizeMode="cover"
+                    onError={() => {
+                      if (__DEV__) {
+                        console.log(
+                          `[Avatar] Image load FAILED for ${player.name}`,
+                        );
+                      }
+                    }}
+                  />
+                </View>
+              );
+            })}
           </Animated.View>
         </View>
 
@@ -442,7 +520,6 @@ function SpinWheelComponent({
 
         <Pointer size={size} />
 
-        {/* center SPIN button (concentric white/pink rings) */}
         <View style={styles.centerFill} pointerEvents="box-none">
           <View
             style={[
@@ -466,9 +543,9 @@ function SpinWheelComponent({
             >
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={'Spin the wheel'}
-                accessibilityState={{ disabled: isSpinning }}
-                disabled={isSpinning}
+                accessibilityLabel={canSpin ? 'Spin the wheel' : 'Waiting for host'}
+                accessibilityState={{ disabled: !canSpin || isSpinning }}
+                disabled={!canSpin || isSpinning}
                 onPress={() => {
                   void spin();
                 }}
@@ -479,15 +556,18 @@ function SpinWheelComponent({
                     height: spinBtn,
                     borderRadius: spinBtn / 2,
                   },
-                  pressed && !isSpinning && styles.spinBtnPressed,
-                  isSpinning && styles.spinBtnDisabled,
+                  pressed && canSpin && !isSpinning && styles.spinBtnPressed,
+                  (!canSpin || isSpinning) && styles.spinBtnDisabled,
                 ]}
               >
                 <SpinButtonFace diameter={spinBtn} />
                 <Text style={styles.spinLabel} maxFontSizeMultiplier={1.2}>
                   {'SPIN'}
                 </Text>
-                <Text style={styles.spinLabelSmall} maxFontSizeMultiplier={1.2}>
+                <Text
+                  style={styles.spinLabelSmall}
+                  maxFontSizeMultiplier={1.2}
+                >
                   {'TAP!'}
                 </Text>
               </Pressable>
@@ -516,6 +596,7 @@ function SpinWheelComponent({
         winner={winner}
         onSpinAgain={spinAgain}
         onClose={closeModal}
+        canSpin={canSpin}
       />
     </View>
   );
@@ -585,9 +666,9 @@ const styles = StyleSheet.create({
   spinLabel: {
     fontFamily: WHEEL_FONTS.display,
     fontWeight: '800',
-    fontSize: 25,
+    fontSize: 22,
     letterSpacing: 1,
-    lineHeight: 25,
+    lineHeight: 28,
     color: WHEEL_COLORS.white,
     textShadowColor: 'rgba(120,10,55,0.65)',
     textShadowOffset: { width: 0, height: 3 },
@@ -596,10 +677,12 @@ const styles = StyleSheet.create({
   spinLabelSmall: {
     fontFamily: WHEEL_FONTS.body,
     fontWeight: '700',
-    fontSize: 11,
+    fontSize: 10,
     letterSpacing: 2,
+    lineHeight: 14,
     color: WHEEL_COLORS.white,
     opacity: 0.92,
+    marginTop: -2,
   },
   errorText: {
     marginTop: 16,
