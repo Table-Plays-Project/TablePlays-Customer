@@ -57,3 +57,60 @@ export async function spinWheel(
     };
   }
 }
+
+export async function submitEscapeAnswer(
+  sessionId: string,
+  answer: number,
+): Promise<{
+  correct: boolean;
+  newPayerIndex: number | null;
+  timedOut: boolean;
+  error: GameSessionError | null;
+}> {
+  try {
+    const { data, error } = await supabase.rpc('submit_escape_answer', {
+      p_session_id: sessionId,
+      p_answer: answer,
+    });
+    if (error) {
+      return {
+        correct: false,
+        newPayerIndex: null,
+        timedOut: false,
+        error: safeErrorMessage(error, 'Failed to submit answer.'),
+      };
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    return {
+      correct: row?.correct ?? false,
+      newPayerIndex: row?.new_payer_index ?? null,
+      timedOut: row?.timed_out ?? false,
+      error: null,
+    };
+  } catch (e) {
+    console.error('submitEscapeAnswer failed:', e);
+    return {
+      correct: false,
+      newPayerIndex: null,
+      timedOut: false,
+      error: { message: 'Failed to submit answer.', code: null },
+    };
+  }
+}
+
+export async function resolveExpiredChallenge(
+  sessionId: string,
+): Promise<{ error: GameSessionError | null }> {
+  try {
+    const { error } = await supabase.rpc('resolve_expired_challenge', {
+      p_session_id: sessionId,
+    });
+    if (error) {
+      return { error: safeErrorMessage(error, 'Failed to resolve challenge.') };
+    }
+    return { error: null };
+  } catch (e) {
+    console.error('resolveExpiredChallenge failed:', e);
+    return { error: { message: 'Failed to resolve challenge.', code: null } };
+  }
+}

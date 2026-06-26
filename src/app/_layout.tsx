@@ -88,10 +88,12 @@ export default function RootLayout(): JSX.Element | null {
   );
 }
 
+let splashShownOnce = false;
+
 function MainLayout(): JSX.Element {
   const { user, setAuth } = AuthContext.useAuth();
   const colorScheme = useColorScheme();
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(!splashShownOnce);
   const [evicting, setEvicting] = useState(false);
   const deviceIdRef = useRef<string | null>(null);
 
@@ -339,7 +341,7 @@ function MainLayout(): JSX.Element {
         </View>
       ) : null}
       {showSplash ? (
-        <SplashOverlay onFinish={() => setShowSplash(false)} />
+        <SplashOverlay onFinish={() => { splashShownOnce = true; setShowSplash(false); }} />
       ) : null}
     </ThemeProvider>
   );

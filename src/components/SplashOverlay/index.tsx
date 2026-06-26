@@ -15,10 +15,6 @@ import BubbleHeading from '@/components/BubbleHeading';
 
 import { styles } from './styles';
 
-type SplashOverlayProps = {
-  onFinish: () => void;
-};
-
 const SPLASH_FONT_SIZE = 64;
 
 function formatWordmark(name: string): string {
@@ -31,6 +27,10 @@ function formatWordmark(name: string): string {
   }
   return name;
 }
+
+type SplashOverlayProps = {
+  onFinish: () => void;
+};
 
 export default function SplashOverlay({
   onFinish,
@@ -45,7 +45,7 @@ export default function SplashOverlay({
   const screenOpacity = useSharedValue(1);
 
   function triggerHaptic(): void {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }
 
   useEffect(() => {
@@ -53,15 +53,15 @@ export default function SplashOverlay({
     wordmarkScale.value = withTiming(1, { duration: 600 });
 
     handsOpacity.value = withDelay(
-      1700,
-      withTiming(1, { duration: 900 }, (finished) => {
+      400,
+      withTiming(1, { duration: 800 }, (finished) => {
         if (finished) runOnJS(triggerHaptic)();
       }),
     );
-    handsScale.value = withDelay(1700, withTiming(1, { duration: 900 }));
+    handsScale.value = withDelay(400, withTiming(1, { duration: 800 }));
 
     screenOpacity.value = withDelay(
-      3100,
+      3200,
       withTiming(0, { duration: 500 }, (finished) => {
         if (finished) runOnJS(onFinish)();
       }),
@@ -89,9 +89,9 @@ export default function SplashOverlay({
             <BubbleHeading text={wordmark} fontSize={SPLASH_FONT_SIZE} />
           </Animated.View>
 
-          <Animated.View style={[styles.handsImageWrap, handsStyle]}>
+          <Animated.View style={[styles.handsWrap, handsStyle]}>
             <Image
-              source={require('@/assets/images/hands-exchange.png')}
+              source={require('@/assets/images/hands-splash.gif')}
               style={styles.handsImage}
               resizeMode="contain"
             />

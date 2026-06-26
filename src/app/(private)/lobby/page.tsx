@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
   ActivityIndicator,
@@ -62,6 +62,26 @@ export default function LobbyPage(): JSX.Element {
   const [actionLoading, setActionLoading] = useState(false);
   const isHost = session?.host_id === user?.id;
   const navigatedRef = useRef(false);
+
+  const OFFLINE_MS = 10_000;
+  const [offTick, setOffTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setOffTick((v) => v + 1), 3000);
+    return () => clearInterval(t);
+  }, []);
+  const isPlayerOffline = useMemo(() => {
+    const now = Date.now();
+    const map = new Map<string, boolean>();
+    players.forEach((p) => {
+      if (p.user_id === user?.id) { map.set(p.id, false); return; }
+      if (!p.last_active_at) { map.set(p.id, false); return; }
+      map.set(p.id, now - new Date(p.last_active_at).getTime() > OFFLINE_MS);
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [players, user?.id, offTick]);
+
+  const anyOffline = Array.from(isPlayerOffline.values()).some(Boolean);
 
   useEffect(() => {
     if (__DEV__) console.log('[Screen] LobbyPage MOUNTED');
@@ -196,7 +216,7 @@ export default function LobbyPage(): JSX.Element {
 
   const roomCode = session?.room_code ?? '------';
   const canStart =
-    isHost && players.length >= 2 && !actionLoading;
+    isHost && players.length >= 2 && !actionLoading && !anyOffline;
 
   return (
     <AppBackground>
@@ -252,13 +272,29 @@ export default function LobbyPage(): JSX.Element {
           ) : (
             <View style={styles.playersList}>
               {players.map((player) => (
-                <View key={player.id} style={styles.playerRow}>
-                  <View style={styles.playerAvatar}>
+                <View
+                  key={player.id}
+                  style={[
+                    styles.playerRow,
+                    isPlayerOffline.get(player.id) && styles.playerRowOffline,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.playerAvatar,
+                      isPlayerOffline.get(player.id) && styles.playerAvatarOffline,
+                    ]}
+                  >
                     <Text style={styles.playerAvatarText}>
                       {initialsFor(player.player_name)}
                     </Text>
                   </View>
-                  <Text style={styles.playerName}>{player.player_name}</Text>
+                  <View style={styles.playerNameWrap}>
+                    <Text style={styles.playerName}>{player.player_name}</Text>
+                    {isPlayerOffline.get(player.id) ? (
+                      <Text style={styles.offlineLabel}>OFFLINE</Text>
+                    ) : null}
+                  </View>
                   {player.is_host ? (
                     <View style={styles.hostBadge}>
                       <Text style={styles.hostBadgeText}>HOST</Text>
@@ -299,7 +335,9 @@ export default function LobbyPage(): JSX.Element {
                   ? 'WAITING FOR HOST...'
                   : players.length < 2
                     ? 'NEED 2+ PLAYERS'
-                    : 'START GAME'}
+                    : anyOffline
+                      ? 'WAITING FOR PLAYERS...'
+                      : 'START GAME'}
               </Text>
             )}
           </Pressable>

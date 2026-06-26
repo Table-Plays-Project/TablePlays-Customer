@@ -1,8 +1,6 @@
 import { StyleSheet } from 'react-native';
 import { spacing } from '@/constants/theme';
 
-const HANDS_IMAGE_ASPECT_RATIO = 373 / 239;
-
 export const styles = StyleSheet.create({
   root: {
     ...StyleSheet.absoluteFillObject,
@@ -18,9 +16,9 @@ export const styles = StyleSheet.create({
   wordmarkBlock: {
     alignItems: 'center',
   },
-  handsImageWrap: {
+  handsWrap: {
     width: '130%',
-    aspectRatio: HANDS_IMAGE_ASPECT_RATIO,
+    aspectRatio: 1080 / 734,
   },
   handsImage: {
     width: '100%',

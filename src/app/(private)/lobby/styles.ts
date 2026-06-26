@@ -136,13 +136,31 @@ const styles = StyleSheet.create({
     fontSize: fontSize.md,
     color: colors.textInverse,
   },
-  playerName: {
+  playerRowOffline: {
+    opacity: 0.5,
+    borderWidth: 1,
+    borderColor: colors.error,
+  },
+  playerAvatarOffline: {
+    backgroundColor: colors.error,
+  },
+  playerNameWrap: {
     flex: 1,
+  },
+  playerName: {
     fontFamily: fonts.semiBold,
     fontSize: fontSize.base,
     lineHeight: 20,
     color: colors.textInverse,
     ...TEXT_SHADOW,
+  },
+  offlineLabel: {
+    fontFamily: fonts.bold,
+    fontSize: fontSize.xs,
+    lineHeight: 14,
+    color: colors.error,
+    letterSpacing: 0.5,
+    marginTop: 2,
   },
   hostBadge: {
     backgroundColor: colors.accent,

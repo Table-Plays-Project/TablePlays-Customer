@@ -1,6 +1,8 @@
+import { useEffect, useRef } from 'react';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
+  Alert,
   Image as RNImage,
   Pressable,
   SafeAreaView,
@@ -15,6 +17,10 @@ import AppBackground from '@/components/AppBackground';
 import { ActionButton, SecondaryButton } from '@/components/buttons';
 import AuthContext from '@/contexts/auth';
 import ProfileContext from '@/contexts/profile';
+import {
+  findActiveSession,
+  leaveAllActiveSessions,
+} from '@/services/game';
 
 import styles from './styles';
 
@@ -51,6 +57,49 @@ export default function Dashboard(): JSX.Element {
   const firstName =
     user?.user_metadata?.first_name ?? user?.user_metadata?.name ?? '';
   const greeting = firstName ? `Hello, ${firstName}` : 'Welcome back';
+
+  // Check for active game session on mount — handles force-close rejoin
+  const checkedRef = useRef(false);
+  useEffect(() => {
+    if (checkedRef.current || !user) return;
+    checkedRef.current = true;
+
+    findActiveSession().then(({ sessionId, status }) => {
+      if (!sessionId || !status) return;
+
+      Alert.alert(
+        'Active Game Found',
+        'You have an active game session. Would you like to rejoin?',
+        [
+          {
+            text: 'Leave All Games',
+            style: 'destructive',
+            onPress: () => {
+              leaveAllActiveSessions().catch((e) => {
+                console.error('leaveAllActiveSessions failed:', e);
+              });
+            },
+          },
+          {
+            text: 'Rejoin',
+            onPress: () => {
+              if (status === 'waiting') {
+                router.replace({
+                  pathname: '/(private)/lobby/page',
+                  params: { sessionId },
+                } as never);
+              } else {
+                router.replace({
+                  pathname: '/(private)/spinWheel/page',
+                  params: { sessionId },
+                } as never);
+              }
+            },
+          },
+        ],
+      );
+    });
+  }, [user]);
 
   return (
     <AppBackground>

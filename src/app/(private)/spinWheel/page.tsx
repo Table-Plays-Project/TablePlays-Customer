@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, AppState, AppStateStatus, BackHandler } from 'react-native';
+import { Alert, AppState, AppStateStatus, BackHandler, View } from 'react-native';
 import { Asset } from 'expo-asset';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import { SpinWheelScreen } from '@/components/games/SpinWheel';
+import EscapeChallenge from '@/components/games/SpinWheel/EscapeChallenge';
 import type { WheelPlayer } from '@/components/games/SpinWheel';
 import AuthContext from '@/contexts/auth';
 import ProfileContext from '@/contexts/profile';
@@ -12,10 +13,14 @@ import useGameSession from '@/hooks/game/useGameSession';
 import {
   cancelGameSession,
   finishSession,
+  kickOfflinePlayer,
   leaveGameSession,
   resetSessionToWaiting,
+  resolveExpiredChallenge,
   spinWheel,
+  submitEscapeAnswer,
 } from '@/services/game';
+import { ESCAPE_CHALLENGE } from '@/components/games/SpinWheel/wheelConfig';
 
 const avatarAssetMap = new Map<string, number>();
 AVATARS.forEach((a) => {
@@ -65,7 +70,7 @@ export default function SpinWheelPage(): JSX.Element {
     user?.user_metadata?.name ??
     'Player';
 
-  const { session, players, onlineUserIds, loading, error, refetch } =
+  const { session, players, loading, error, refetch } =
     useGameSession(
       sessionId ?? null,
       user?.id ?? null,
@@ -84,6 +89,61 @@ export default function SpinWheelPage(): JSX.Element {
       ? session.game_state.spin_started_at
       : null;
 
+  // Escape-challenge derived state. excluded_payer_ids being non-empty
+  // means the current payer_index was reached via an internal escape
+  // re-spin, not a fresh top-level spin_wheel call — so EVERY device
+  // (host included) should passively animate to it rather than trigger
+  // a brand new round, which would wipe the exclusion list.
+  const excludedPayerIds = useMemo(
+    () =>
+      Array.isArray(session?.game_state?.excluded_payer_ids)
+        ? (session.game_state.excluded_payer_ids as string[])
+        : [],
+    [session?.game_state?.excluded_payer_ids],
+  );
+  const isEscapeContinuation = excludedPayerIds.length > 0;
+  const rawChallengeStatus = session?.game_state?.challenge_status;
+  const rawChallengeDeadline = session?.game_state?.challenge_deadline;
+
+  const prevRawStatusRef = useRef(rawChallengeStatus);
+  if (__DEV__ && rawChallengeStatus && rawChallengeStatus !== prevRawStatusRef.current) {
+    const secsLeft = rawChallengeDeadline
+      ? Math.round((new Date(String(rawChallengeDeadline)).getTime() - Date.now()) / 1000)
+      : 'N/A';
+    console.log(
+      `[Challenge] PAGE: status=${rawChallengeStatus} deadline=${String(rawChallengeDeadline)} secsLeft=${secsLeft}`,
+    );
+  }
+  prevRawStatusRef.current = rawChallengeStatus;
+
+  const challengeStatus =
+    rawChallengeStatus === 'pending' || rawChallengeStatus === 'failed'
+      ? rawChallengeStatus
+      : null;
+  const challengePlayerId =
+    typeof session?.game_state?.challenge_player_id === 'string'
+      ? session.game_state.challenge_player_id
+      : null;
+  const challengeStart =
+    typeof session?.game_state?.challenge_start === 'number'
+      ? session.game_state.challenge_start
+      : null;
+  const challengeStep =
+    typeof session?.game_state?.challenge_step === 'number'
+      ? session.game_state.challenge_step
+      : null;
+  const challengeDeadline =
+    typeof session?.game_state?.challenge_deadline === 'string'
+      ? session.game_state.challenge_deadline
+      : null;
+
+  const myPlayer = players.find((p) => p.user_id === user?.id) ?? null;
+  const isChallengedPlayer =
+    !!myPlayer && !!challengePlayerId && myPlayer.id === challengePlayerId;
+  const challengedPlayer = challengePlayerId
+    ? players.find((p) => p.id === challengePlayerId) ?? null
+    : null;
+
   useEffect(() => {
     if (__DEV__) console.log('[Screen] SpinWheelPage MOUNTED');
     return () => {
@@ -98,22 +158,33 @@ export default function SpinWheelPage(): JSX.Element {
     };
   }, [sessionId, isHost]);
 
-  // Host background cleanup — if the host's app goes to background
-  // for more than 15 seconds, auto-cancel the session so other
-  // players aren't stuck waiting forever. Handles the common case
-  // of host switching apps and forgetting. Force-kill (swiping away)
-  // requires server-side cleanup (pg_cron, documented as unbuilt).
+  // Background > 10 seconds → auto-redirect.
+  // Host: cancel session + go to lobby. Player: leave + go to dashboard.
   const bgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!isHost || !sessionId) return;
+    if (!sessionId) return;
 
     const sub = AppState.addEventListener(
       'change',
       (state: AppStateStatus) => {
         if (state === 'background' || state === 'inactive') {
           bgTimerRef.current = setTimeout(() => {
-            cancelGameSession(sessionId).catch(() => {});
-          }, 15_000);
+            if (navigatedAway.current) return;
+            navigatedAway.current = true;
+            if (isHost) {
+              resetSessionToWaiting(sessionId)
+                .catch(() => cancelGameSession(sessionId).catch(() => {}))
+                .finally(() => {
+                  router.replace({
+                    pathname: '/(private)/lobby/page',
+                    params: { sessionId },
+                  } as never);
+                });
+            } else {
+              leaveGameSession(sessionId).catch(() => {});
+              router.replace('/(private)/dashboard/page');
+            }
+          }, 10_000);
         } else if (state === 'active') {
           if (bgTimerRef.current) {
             clearTimeout(bgTimerRef.current);
@@ -128,17 +199,6 @@ export default function SpinWheelPage(): JSX.Element {
       if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
     };
   }, [isHost, sessionId]);
-
-  // Detect host disconnect via presence
-  const hostId = session?.host_id;
-  useEffect(() => {
-    if (navigatedAway.current || !hostId || isHost) return;
-    if (onlineUserIds.length > 0 && !onlineUserIds.includes(hostId)) {
-      if (__DEV__) console.log('[Presence] Host disconnected — leaving');
-      navigatedAway.current = true;
-      router.replace('/(private)/dashboard/page');
-    }
-  }, [onlineUserIds, hostId, isHost]);
 
   // When host presses "Back to Lobby", status resets to 'waiting'.
   // Non-host players should follow back to lobby too.
@@ -163,8 +223,13 @@ export default function SpinWheelPage(): JSX.Element {
     }
   }, [session?.status]);
 
-  // Track player changes — notify host when someone leaves, and
-  // redirect host to lobby if count drops below 2.
+  // Stable key that only changes when actual player IDs change (join/leave),
+  // NOT on every poll that returns the same data with a new array reference.
+  const playerKey = useMemo(
+    () => players.map((p) => p.id).join(','),
+    [players],
+  );
+
   const prevPlayerCountRef = useRef(players.length);
   const prevPlayerNamesRef = useRef<string[]>([]);
   useEffect(() => {
@@ -174,7 +239,6 @@ export default function SpinWheelPage(): JSX.Element {
     const prevNames = prevPlayerNamesRef.current;
     const currentNames = players.map((p) => p.player_name);
 
-    // Detect who left
     if (prevCount > 0 && players.length < prevCount) {
       const left = prevNames.filter((n) => !currentNames.includes(n));
       if (left.length > 0 && isHost) {
@@ -185,8 +249,6 @@ export default function SpinWheelPage(): JSX.Element {
     prevPlayerCountRef.current = players.length;
     prevPlayerNamesRef.current = currentNames;
 
-    // Host goes back to lobby if not enough players — reset status
-    // to 'waiting' first so the lobby can accept new joins.
     if (players.length > 0 && players.length < 2 && isHost && session?.status !== 'finished') {
       navigatedAway.current = true;
       if (__DEV__) console.log('[Screen] SpinWheelPage → Lobby (not enough players)');
@@ -197,7 +259,7 @@ export default function SpinWheelPage(): JSX.Element {
         } as never);
       });
     }
-  }, [players.length, players, sessionId, isHost, session?.status]);
+  }, [playerKey, sessionId, isHost, session?.status]);
 
   const avatarIds = useMemo(
     () =>
@@ -252,11 +314,21 @@ export default function SpinWheelPage(): JSX.Element {
     // Joiner: use the server-determined index already in game_state.
     // Never call the RPC from the joiner — it would pick a DIFFERENT
     // winner than what the host triggered.
-    if (!isHost && payerIndex !== null && payerIndex < players.length) {
+    //
+    // Escape continuation (host included): the current payer_index was
+    // produced by submit_escape_answer's internal re-spin, not a fresh
+    // top-level spin. Calling spin_wheel here would start an unrelated
+    // brand new round and wipe the exclusion list — every device must
+    // just animate to the already-known cached index instead.
+    if (
+      (!isHost || isEscapeContinuation) &&
+      payerIndex !== null &&
+      payerIndex < players.length
+    ) {
       return payerIndex;
     }
 
-    // Host: always call the RPC (first spin AND re-spin).
+    // Host, fresh top-level spin: always call the RPC.
     // The cached payerIndex is the PREVIOUS winner — re-spin needs a
     // fresh server call to determine a new one.
     if (!sessionId) throw new Error('No session');
@@ -268,7 +340,7 @@ export default function SpinWheelPage(): JSX.Element {
       throw new Error('Player list out of sync. Please retry.');
     }
     return result.payerIndex;
-  }, [sessionId, payerIndex, players.length, isHost]);
+  }, [sessionId, payerIndex, players.length, isHost, isEscapeContinuation]);
 
   async function doLeave(): Promise<void> {
     if (navigatedAway.current) return;
@@ -355,6 +427,109 @@ export default function SpinWheelPage(): JSX.Element {
     [],
   );
 
+  const handleSubmitEscapeAnswer = useCallback(
+    async (answer: number): Promise<void> => {
+      if (!sessionId) return;
+      try {
+        await submitEscapeAnswer(sessionId, answer);
+      } catch (e) {
+        // Best-effort — the next poll/broadcast will reconcile state
+        // regardless of whether this specific call succeeded.
+        console.error('submitEscapeAnswer failed:', e);
+      }
+    },
+    [sessionId],
+  );
+
+  // Safety net: if the challenged player's device dies mid-countdown,
+  // every OTHER device polling the session notices the deadline has
+  // passed and finalizes it. Safe for multiple devices to race on this
+  // — resolve_expired_challenge's atomic UPDATE...WHERE gate means only
+  // the first call actually changes anything.
+  const resolvedDeadlineRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (challengeStatus !== 'pending' || !challengeDeadline || !sessionId) return;
+    if (resolvedDeadlineRef.current === challengeDeadline) return;
+
+    const msUntilCheck =
+      new Date(challengeDeadline).getTime() - Date.now() + ESCAPE_CHALLENGE.GRACE_MS;
+
+    const timer = setTimeout(() => {
+      resolvedDeadlineRef.current = challengeDeadline;
+      resolveExpiredChallenge(sessionId).catch((e) => {
+        console.error('resolveExpiredChallenge failed:', e);
+      });
+    }, Math.max(0, msUntilCheck));
+
+    return () => clearTimeout(timer);
+  }, [challengeStatus, challengeDeadline, sessionId]);
+
+  // Challenge screen — shown as a FULL PAGE REPLACEMENT, not an overlay
+  const [showChallengeScreen, setShowChallengeScreen] = useState(false);
+
+  const handleChallengeReady = useCallback((): void => {
+    setShowChallengeScreen(true);
+  }, []);
+
+  // Reset challenge screen when challenge resolves
+  useEffect(() => {
+    if (challengeStatus !== 'pending') {
+      setShowChallengeScreen(false);
+    }
+  }, [challengeStatus]);
+
+  // Reset challenge screen when a new spin starts
+  useEffect(() => {
+    setShowChallengeScreen(false);
+  }, [spinStartedAt]);
+
+  // Database heartbeat detection. Each player updates last_active_at
+  // via REST on every poll tick. When their app dies, updates stop,
+  // the timestamp freezes, and we detect staleness from the polled
+  // player data. No Presence dependency — pure database.
+  const OFFLINE_THRESHOLD_MS = 10_000;
+  const [offlineTick, setOfflineTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setOfflineTick((v) => v + 1), 3000);
+    return () => clearInterval(t);
+  }, []);
+
+  const offlinePlayers = useMemo(() => {
+    const now = Date.now();
+    return players.filter((p) => {
+      if (p.user_id === user?.id) return false;
+      if (!p.user_id) return false;
+      if (!p.last_active_at) return false;
+      return now - new Date(p.last_active_at).getTime() > OFFLINE_THRESHOLD_MS;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [players, user?.id, offlineTick]);
+
+  const allPlayersOnline = offlinePlayers.length === 0;
+
+  // Auto-kick offline players after 15 seconds (host only).
+  // Handles force-close where the player's own cleanup never ran.
+  const kickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!isHost || !sessionId || allPlayersOnline) {
+      if (kickTimerRef.current) {
+        clearTimeout(kickTimerRef.current);
+        kickTimerRef.current = null;
+      }
+      return;
+    }
+    kickTimerRef.current = setTimeout(() => {
+      offlinePlayers.forEach((p) => {
+        kickOfflinePlayer(sessionId, p.id).catch((e) => {
+          console.error('kickOfflinePlayer failed:', e);
+        });
+      });
+    }, 15_000);
+    return () => {
+      if (kickTimerRef.current) clearTimeout(kickTimerRef.current);
+    };
+  }, [isHost, sessionId, allPlayersOnline, offlinePlayers]);
+
   function handleGameEnd(): void {
     Alert.alert(
       'Leave Game',
@@ -367,6 +542,7 @@ export default function SpinWheelPage(): JSX.Element {
   }
 
   return (
+    <View style={{ flex: 1 }}>
     <SpinWheelScreen
       players={wheelPlayers}
       loading={loading}
@@ -374,11 +550,46 @@ export default function SpinWheelPage(): JSX.Element {
       requestWinner={requestWinner}
       onBack={handleBack}
       onRetry={refetch}
-      autoSpin={!!session && isSpinning && payerIndex !== null && !isHost}
-      canSpin={isHost}
+      autoSpin={
+        !!session &&
+        isSpinning &&
+        payerIndex !== null &&
+        (!isHost || isEscapeContinuation)
+      }
+      canSpin={isHost && allPlayersOnline}
       spinKey={spinStartedAt}
       onResult={handleResult}
       onGameEnd={handleGameEnd}
+      challengeStatus={challengeStatus}
+      isChallengedPlayer={isChallengedPlayer}
+      challengedPlayerName={challengedPlayer?.player_name ?? null}
+      challengeStart={challengeStart}
+      challengeStep={challengeStep}
+      challengeDeadline={challengeDeadline}
+      onSubmitEscapeAnswer={handleSubmitEscapeAnswer}
+      onChallengeReady={handleChallengeReady}
+      statusMessage={
+        !allPlayersOnline && isHost
+          ? `${offlinePlayers.map((p) => p.player_name).join(', ')} is not here`
+          : null
+      }
     />
+    {showChallengeScreen &&
+    challengeStatus === 'pending' &&
+    isChallengedPlayer &&
+    challengeStart !== null &&
+    challengeStep !== null &&
+    challengeDeadline ? (
+      <EscapeChallenge
+        start={challengeStart}
+        step={challengeStep}
+        deadline={challengeDeadline}
+        playerName={challengedPlayer?.player_name ?? accountName}
+        onAnswer={(value) => {
+          void handleSubmitEscapeAnswer(value);
+        }}
+      />
+    ) : null}
+    </View>
   );
 }

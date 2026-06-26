@@ -1,8 +1,10 @@
 export type {
   BroadcastPayload,
+  ChallengeStatus,
   GameSessionError,
   GameSession,
   GameSessionStatus,
+  GameState,
   HostType,
   SessionPlayer,
   SessionChannelSubscription,
@@ -12,7 +14,11 @@ export type { PresenceState, SessionChannelCallbacks } from './sessions';
 
 export {
   createGameSession,
+  findActiveSession,
   joinGameSession,
+  leaveAllActiveSessions,
+  sendHeartbeat,
+  kickOfflinePlayer,
   leaveGameSession,
   cancelGameSession,
   resetSessionToWaiting,
@@ -22,4 +28,9 @@ export {
   subscribeToSessionChannel,
 } from './sessions';
 
-export { finishSession, spinWheel } from './spinWheel';
+export {
+  finishSession,
+  spinWheel,
+  submitEscapeAnswer,
+  resolveExpiredChallenge,
+} from './spinWheel';

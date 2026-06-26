@@ -136,3 +136,16 @@ export const WHEEL_FONTS = {
 
 export const PLAYER_MIN = 2;
 export const PLAYER_MAX = 4;
+
+/* ---- escape challenge ----
+   Server is authoritative on timing (challenge_deadline is an absolute
+   timestamp written by the RPC) — this client-side duration is only used
+   to render the countdown visually and to know when to fire the
+   safety-net auto-submit. It must match the server's interval exactly
+   or the countdown will visually disagree with when the server actually
+   cuts it off. */
+export const ESCAPE_CHALLENGE = {
+  TIME_LIMIT_MS: 5000,
+  OPTION_COUNT: 4,
+  GRACE_MS: 1000, // safety-net resolve fires this long after the deadline
+} as const;

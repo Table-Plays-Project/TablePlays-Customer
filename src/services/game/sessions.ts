@@ -149,6 +149,25 @@ export async function resetSessionToWaiting(
   }
 }
 
+export async function kickOfflinePlayer(
+  sessionId: string,
+  playerId: string,
+): Promise<{ error: GameSessionError | null }> {
+  try {
+    const { error } = await supabase.rpc('kick_offline_player', {
+      p_session_id: sessionId,
+      p_player_id: playerId,
+    });
+    if (error) {
+      return { error: safeErrorMessage(error, 'Failed to remove player.') };
+    }
+    return { error: null };
+  } catch (e) {
+    console.error('kickOfflinePlayer failed:', e);
+    return { error: { message: 'Failed to remove player.', code: null } };
+  }
+}
+
 export async function startGame(
   sessionId: string,
 ): Promise<{ error: GameSessionError | null }> {
@@ -163,6 +182,91 @@ export async function startGame(
   } catch (e) {
     console.error('startGame failed:', e);
     return { error: { message: 'Failed to start the game.', code: null } };
+  }
+}
+
+export async function leaveAllActiveSessions(): Promise<void> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data } = await supabase
+      .from('session_players')
+      .select('session_id, is_host, game_sessions!inner(id, status, host_id)')
+      .eq('user_id', user.id)
+      .in('game_sessions.status', ['waiting', 'active', 'spinning']);
+
+    if (!data || data.length === 0) return;
+
+    for (const row of data) {
+      const r = row as unknown as {
+        session_id: string;
+        is_host: boolean;
+        game_sessions: { id: string; status: string; host_id: string };
+      };
+      try {
+        if (r.game_sessions.host_id === user.id) {
+          await supabase.rpc('cancel_game_session', { p_session_id: r.session_id });
+        } else {
+          await supabase.rpc('leave_game_session', { p_session_id: r.session_id });
+        }
+      } catch {
+        // Best-effort per session
+      }
+    }
+  } catch (e) {
+    console.error('leaveAllActiveSessions failed:', e);
+  }
+}
+
+export async function sendHeartbeat(sessionId: string): Promise<void> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase
+      .from('session_players')
+      .update({ last_active_at: new Date().toISOString() })
+      .eq('session_id', sessionId)
+      .eq('user_id', user.id);
+  } catch {
+    // Non-critical — next tick retries
+  }
+}
+
+export async function findActiveSession(): Promise<{
+  sessionId: string | null;
+  roomCode: string | null;
+  status: string | null;
+  isHost: boolean;
+}> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { sessionId: null, roomCode: null, status: null, isHost: false };
+
+    const { data, error } = await supabase
+      .from('session_players')
+      .select('session_id, game_sessions!inner(id, room_code, status, host_id)')
+      .eq('user_id', user.id)
+      .in('game_sessions.status', ['waiting', 'active', 'spinning'])
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (error || !data || data.length === 0) {
+      return { sessionId: null, roomCode: null, status: null, isHost: false };
+    }
+
+    const row = data[0] as unknown as {
+      session_id: string;
+      game_sessions: { id: string; room_code: string; status: string; host_id: string };
+    };
+    return {
+      sessionId: row.session_id,
+      roomCode: row.game_sessions.room_code,
+      status: row.game_sessions.status,
+      isHost: row.game_sessions.host_id === user.id,
+    };
+  } catch {
+    return { sessionId: null, roomCode: null, status: null, isHost: false };
   }
 }
 
@@ -198,7 +302,7 @@ export async function fetchSessionPlayers(
     const { data, error } = await supabase
       .from('session_players')
       .select(
-        'id, session_id, player_name, user_id, score, rank, is_payer, is_host, tip_percent, payment_method, avatar_id, created_at',
+        'id, session_id, player_name, user_id, score, rank, is_payer, is_host, tip_percent, payment_method, avatar_id, last_active_at, created_at',
       )
       .eq('session_id', sessionId)
       .order('created_at', { ascending: true });
@@ -221,6 +325,7 @@ export async function fetchSessionPlayers(
 export type PresenceState = {
   userId: string;
   playerName: string;
+  lastActive: number;
 };
 
 export type SessionChannelCallbacks = {
@@ -286,7 +391,7 @@ export async function subscribeToSessionChannel(
         );
       }
       if (status === 'SUBSCRIBED' && trackAs) {
-        await channel.track(trackAs);
+        await channel.track({ ...trackAs, lastActive: Date.now() });
         if (__DEV__) {
           console.log(`[Presence] tracking as ${trackAs.playerName}`);
         }
@@ -297,6 +402,22 @@ export async function subscribeToSessionChannel(
     unsubscribe: () => {
       channel.untrack();
       supabase.removeChannel(channel);
+    },
+    untrack: () => {
+      channel.untrack();
+    },
+    retrack: () => {
+      if (trackAs) channel.track({ ...trackAs, lastActive: Date.now() });
+    },
+    getPresenceState: (): PresenceState[] => {
+      const state = channel.presenceState<PresenceState>();
+      const result: PresenceState[] = [];
+      Object.values(state).forEach((presences) => {
+        (presences as PresenceState[]).forEach((p) => {
+          if (p.userId) result.push(p);
+        });
+      });
+      return result;
     },
   };
 }

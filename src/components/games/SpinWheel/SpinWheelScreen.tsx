@@ -152,6 +152,15 @@ export function SpinWheelScreen({
   spinKey,
   onResult,
   onGameEnd,
+  challengeStatus,
+  isChallengedPlayer,
+  challengedPlayerName,
+  challengeStart,
+  challengeStep,
+  challengeDeadline,
+  onSubmitEscapeAnswer,
+  onChallengeReady,
+  statusMessage,
 }: SpinWheelScreenProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
@@ -274,11 +283,24 @@ export function SpinWheelScreen({
             onResult={onResult}
             onGameEnd={onGameEnd}
             size={wheelDisplaySize}
+            challengeStatus={challengeStatus}
+            isChallengedPlayer={isChallengedPlayer}
+            challengedPlayerName={challengedPlayerName}
+            challengeStart={challengeStart}
+            challengeStep={challengeStep}
+            challengeDeadline={challengeDeadline}
+            onSubmitEscapeAnswer={onSubmitEscapeAnswer}
+            onChallengeReady={onChallengeReady}
           />
         )}
       </View>
 
       <View style={[styles.controls, { paddingBottom: insets.bottom + 30 }]}>
+        {statusMessage ? (
+          <View style={styles.statusBanner}>
+            <Text style={styles.statusBannerText}>{statusMessage}</Text>
+          </View>
+        ) : null}
         <View style={styles.playersRow}>
           {players.map((player) => (
             <View key={player.id} style={styles.playerSlot}>
@@ -446,6 +468,24 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 15,
     color: WHEEL_COLORS.white,
+  },
+  statusBanner: {
+    backgroundColor: 'rgba(255, 107, 107, 0.85)',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    alignSelf: 'center',
+  },
+  statusBannerText: {
+    fontFamily: WHEEL_FONTS.body,
+    fontWeight: '700',
+    fontSize: 13,
+    color: WHEEL_COLORS.white,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.25)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   playersRow: {
     flexDirection: 'row',

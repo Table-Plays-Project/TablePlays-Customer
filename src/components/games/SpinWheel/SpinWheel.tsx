@@ -46,6 +46,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 
 import {
   WHEEL_COLORS,
@@ -57,6 +58,7 @@ import type { SpinWheelProps } from './types';
 import { WheelFace } from './WheelFace';
 import { Confetti } from './Confetti';
 import { WinnerModal } from './WinnerModal';
+import EscapeChallenge from './EscapeChallenge';
 
 /* ---------- gold ring (faux-conic via stroked arc segments) ---------- */
 function hexToRgb(hex: string): [number, number, number] {
@@ -203,6 +205,24 @@ function Pointer({ size }: { size: number }): React.JSX.Element {
   );
 }
 
+/* ---------- read-only status banner for non-challenged devices ---------- */
+function ChallengeBanner({
+  playerName,
+}: {
+  playerName: string;
+}): React.JSX.Element {
+  return (
+    <View style={styles.challengeBanner} accessibilityLiveRegion="polite">
+      <View style={styles.challengeBannerIcon}>
+        <Ionicons name="flash" size={16} color={WHEEL_COLORS.gold} />
+      </View>
+      <Text style={styles.challengeBannerText}>
+        {playerName} is answering the challenge...
+      </Text>
+    </View>
+  );
+}
+
 /* ---------- center spin button face (radial gradient via SVG) ---------- */
 function SpinButtonFace({ diameter }: { diameter: number }): React.JSX.Element {
   return (
@@ -242,6 +262,14 @@ function SpinWheelComponent({
   canSpin = true,
   spinKey = null,
   onGameEnd,
+  onChallengeReady,
+  challengeStatus = null,
+  isChallengedPlayer = false,
+  challengedPlayerName = null,
+  challengeStart = null,
+  challengeStep = null,
+  challengeDeadline = null,
+  onSubmitEscapeAnswer,
 }: SpinWheelProps): React.JSX.Element {
   const count = players.length;
   const rotation = useSharedValue(0);
@@ -250,6 +278,7 @@ function SpinWheelComponent({
   const [isSpinning, setIsSpinning] = useState(false);
   const [winnerIndex, setWinnerIndex] = useState<number | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [showChallenge, setShowChallenge] = useState(false);
   const prevCountRef = useRef(count);
   if (count !== prevCountRef.current) {
     prevCountRef.current = count;
@@ -317,25 +346,63 @@ function SpinWheelComponent({
     }
   }, []);
 
+  const challengeStatusRef = useRef(challengeStatus);
+  challengeStatusRef.current = challengeStatus;
+  const onChallengeReadyRef = useRef(onChallengeReady);
+  onChallengeReadyRef.current = onChallengeReady;
+
   const handleComplete = useCallback(
     (idx: number, to: number): void => {
       stopTickTimer();
       restAngle.current = to;
       setIsSpinning(false);
+      if (__DEV__) {
+        const deadlineStr = challengeDeadline ?? 'null';
+        const secsLeft = challengeDeadline
+          ? Math.round((new Date(challengeDeadline).getTime() - Date.now()) / 1000)
+          : 'N/A';
+        console.log(
+          `[Challenge] handleComplete: idx=${idx} status=${challengeStatusRef.current} deadline=${deadlineStr} secsLeft=${secsLeft}`,
+        );
+      }
       onWin();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
         () => undefined,
       );
       setConfettiKey((k) => k + 1);
       if (modalTimer.current) clearTimeout(modalTimer.current);
-      modalTimer.current = setTimeout(
-        () => setModalVisible(true),
-        WHEEL_MOTION.WINNER_MODAL_DELAY_MS,
-      );
+
+      if (challengeStatusRef.current === 'pending') {
+        if (__DEV__) console.log('[Challenge] challenge ready — notifying page');
+        setShowChallenge(true);
+        onChallengeReadyRef.current?.();
+      } else {
+        modalTimer.current = setTimeout(
+          () => setModalVisible(true),
+          WHEEL_MOTION.WINNER_MODAL_DELAY_MS,
+        );
+      }
       onResult?.(idx);
     },
     [onWin, onResult, stopTickTimer],
   );
+
+  // Reveal the deferred winner modal once a pending challenge resolves
+  // to 'failed' (payer confirmed). Success instead starts a brand new
+  // spin via the spinKey watcher below, so this branch never fires then.
+  const prevChallengeStatusRef = useRef(challengeStatus);
+  useEffect(() => {
+    if (prevChallengeStatusRef.current === 'pending' && challengeStatus === 'failed') {
+      setShowChallenge(false);
+      if (!isSpinning && winnerIndex !== null) {
+        setModalVisible(true);
+      }
+    }
+    if (prevChallengeStatusRef.current === 'pending' && challengeStatus === null) {
+      setShowChallenge(false);
+    }
+    prevChallengeStatusRef.current = challengeStatus;
+  }, [challengeStatus, isSpinning, winnerIndex]);
 
   const runSpinAnimation = useCallback(
     (idx: number): void => {
@@ -372,10 +439,17 @@ function SpinWheelComponent({
     [count, rotation, handleComplete, startTickTimer, onTickStop],
   );
 
+  const isSpinningRef = useRef(isSpinning);
+  isSpinningRef.current = isSpinning;
+
   const spin = useCallback(async (): Promise<void> => {
-    if (isSpinning) return;
+    if (isSpinningRef.current) return;
+    if (__DEV__) console.log('[Challenge] spin() called, setting isSpinning=true');
+    cancelAnimation(rotation);
     setSpinError(false);
     setIsSpinning(true);
+    setShowChallenge(false);
+    setModalVisible(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(
       () => undefined,
     );
@@ -400,13 +474,30 @@ function SpinWheelComponent({
     if (!canSpin && onGameEnd) onGameEnd();
   }, [canSpin, onGameEnd]);
 
+  // Stable reference — without this, an inline arrow function here would
+  // be recreated on every render (every 500ms poll during the spinning
+  // phase), tearing down and re-creating EscapeChallenge's internal
+  // timeout-checking effect on nearly every tick. Same class of bug
+  // fixed earlier in useGameSession (unstable deps causing effect churn).
+  const handleEscapeAnswer = useCallback(
+    (value: number): void => {
+      void onSubmitEscapeAnswer?.(value);
+    },
+    [onSubmitEscapeAnswer],
+  );
+
+  // Ref ensures timeouts always call the LATEST spin, not the one
+  // captured when the timeout was created (stale-closure bug).
+  const spinRef = useRef(spin);
+  spinRef.current = spin;
+
   const spinAgain = useCallback((): void => {
     setModalVisible(false);
     if (respinTimer.current) clearTimeout(respinTimer.current);
     respinTimer.current = setTimeout(() => {
-      void spin();
+      void spinRef.current();
     }, WHEEL_MOTION.RESPIN_DELAY_MS);
-  }, [spin]);
+  }, []);
 
   const lastSpinKey = useRef<string | null>(null);
   useEffect(() => {
@@ -417,13 +508,19 @@ function SpinWheelComponent({
       spinKey !== lastSpinKey.current &&
       layout.w > 0
     ) {
+      if (__DEV__) console.log(`[Challenge] autoSpin watcher: setting isSpinning=false, will call spin() in 800ms`);
       lastSpinKey.current = spinKey;
       setModalVisible(false);
       setWinnerIndex(null);
       setIsSpinning(false);
-      setTimeout(() => void spin(), 800);
+      setShowChallenge(false);
+      setTimeout(() => {
+        if (__DEV__) console.log(`[Challenge] autoSpin watcher: calling spin() now`);
+        void spinRef.current();
+      }, 800);
     }
-  }, [autoSpin, count, spin, spinKey, layout.w]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSpin, count, spinKey, layout.w]);
 
   useEffect(() => {
     return () => {
@@ -582,6 +679,12 @@ function SpinWheelComponent({
         </Text>
       ) : null}
 
+      {null /* diagnostic logs removed — use handleComplete log for timing */}
+
+      {showChallenge && !isChallengedPlayer && challengedPlayerName ? (
+        <ChallengeBanner playerName={challengedPlayerName} />
+      ) : null}
+
       {layout.w > 0 ? (
         <Confetti
           burstKey={confettiKey}
@@ -691,6 +794,50 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#FFE3E3',
     textAlign: 'center',
+  },
+  challengeOverlay: {
+    position: 'absolute',
+    top: '50%',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    transform: [{ translateY: -110 }],
+    zIndex: 20,
+  },
+  challengeBanner: {
+    marginTop: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    backgroundColor: 'rgba(20, 10, 60, 0.92)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 194, 75, 0.35)',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  challengeBannerIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 194, 75, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  challengeBannerText: {
+    fontFamily: WHEEL_FONTS.body,
+    fontWeight: '700',
+    fontSize: 14,
+    color: WHEEL_COLORS.white,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
 });
 

@@ -49,6 +49,23 @@ export interface SpinWheelProps {
    *  the joiner's modal auto-dismisses and a new spin animation starts. */
   spinKey?: string | null;
   onGameEnd?: () => void;
+  /** Escape-challenge state — null/undefined when no challenge is active
+   *  for the current spin (challenge_status from game_state). */
+  challengeStatus?: 'pending' | 'failed' | null;
+  /** True when the CURRENT device's user is the one being challenged. */
+  isChallengedPlayer?: boolean;
+  /** Name of whoever is being challenged, for the read-only banner shown
+   *  on every other device while the challenge is pending. */
+  challengedPlayerName?: string | null;
+  challengeStart?: number | null;
+  challengeStep?: number | null;
+  challengeDeadline?: string | null;
+  /** Submits the challenged player's answer. Resolves with the server's
+   *  authoritative verdict — never trust a client-side guess. */
+  onSubmitEscapeAnswer?: (answer: number) => Promise<void>;
+  /** Fired when the spin animation completes AND a pending challenge
+   *  exists — the page should show the escape challenge screen. */
+  onChallengeReady?: () => void;
 }
 
 export interface SpinWheelScreenProps {
@@ -64,6 +81,15 @@ export interface SpinWheelScreenProps {
   spinKey?: string | null;
   onResult?: (payerIndex: number) => void;
   onGameEnd?: () => void;
+  challengeStatus?: 'pending' | 'failed' | null;
+  isChallengedPlayer?: boolean;
+  challengedPlayerName?: string | null;
+  challengeStart?: number | null;
+  challengeStep?: number | null;
+  challengeDeadline?: string | null;
+  onSubmitEscapeAnswer?: (answer: number) => Promise<void>;
+  onChallengeReady?: () => void;
+  statusMessage?: string | null;
 }
 
 export interface WheelFaceProps {

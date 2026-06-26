@@ -4,6 +4,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import {
   fetchGameSession,
   fetchSessionPlayers,
+  sendHeartbeat,
   subscribeToSessionChannel,
   type BroadcastPayload,
   type GameSession,
@@ -11,10 +12,13 @@ import {
   type SessionPlayer,
 } from '@/services/game';
 
+type PlayerPresence = { userId: string; lastActive: number };
+
 type UseGameSessionReturn = {
   session: GameSession | null;
   players: SessionPlayer[];
   onlineUserIds: string[];
+  playerPresence: PlayerPresence[];
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -33,9 +37,13 @@ export default function useGameSession(
   const [session, setSession] = useState<GameSession | null>(null);
   const [players, setPlayers] = useState<SessionPlayer[]>([]);
   const [onlineUserIds, setOnlineUserIds] = useState<string[]>([]);
+  const [playerPresence, setPlayerPresence] = useState<PlayerPresence[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const untrackRef = useRef<(() => void) | null>(null);
+  const retrackRef = useRef<(() => void) | null>(null);
+  const getPresenceRef = useRef<(() => PresenceState[]) | null>(null);
   const errorCountRef = useRef(0);
   const lastStatusRef = useRef<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -85,6 +93,9 @@ export default function useGameSession(
     try {
       const result = await fetchSessionPlayers(sessionId);
       if (!result.error) {
+        if (__DEV__) {
+          console.log(`[GameSession] refetchPlayers: ${result.players.length} players`);
+        }
         setPlayers(result.players);
       }
     } catch {
@@ -118,6 +129,8 @@ export default function useGameSession(
     if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     pollTimerRef.current = setInterval(() => {
       refetchSession('poll');
+      retrackRef.current?.();
+      sendHeartbeat(sessionId);
     }, interval);
 
     if (__DEV__) {
@@ -146,7 +159,7 @@ export default function useGameSession(
 
     const presenceTrack: PresenceState | undefined =
       trackUserId && trackPlayerName
-        ? { userId: trackUserId, playerName: trackPlayerName }
+        ? { userId: trackUserId, playerName: trackPlayerName, lastActive: Date.now() }
         : undefined;
 
     subscribeToSessionChannel(
@@ -170,12 +183,21 @@ export default function useGameSession(
         onPresenceSync: (online: PresenceState[]) => {
           if (!mounted) return;
           setOnlineUserIds(online.map((p) => p.userId));
+          setPlayerPresence(
+            online.map((p) => ({
+              userId: p.userId,
+              lastActive: p.lastActive ?? Date.now(),
+            })),
+          );
         },
       },
       presenceTrack,
     ).then((sub) => {
       if (mounted) {
         unsubscribeRef.current = sub.unsubscribe;
+        untrackRef.current = sub.untrack;
+        retrackRef.current = sub.retrack;
+        getPresenceRef.current = sub.getPresenceState;
       } else {
         sub.unsubscribe();
       }
@@ -188,7 +210,12 @@ export default function useGameSession(
     const appStateSub = AppState.addEventListener(
       'change',
       (state: AppStateStatus) => {
-        if (state === 'active') refetchAllRef.current('foreground');
+        if (state === 'active') {
+          retrackRef.current?.();
+          refetchAllRef.current('foreground');
+        } else if (state === 'background' || state === 'inactive') {
+          untrackRef.current?.();
+        }
       },
     );
 
@@ -200,6 +227,9 @@ export default function useGameSession(
         unsubscribeRef.current();
         unsubscribeRef.current = null;
       }
+      untrackRef.current = null;
+      retrackRef.current = null;
+      getPresenceRef.current = null;
       appStateSub.remove();
     };
   }, [sessionId, trackUserId, trackPlayerName]);
@@ -208,6 +238,7 @@ export default function useGameSession(
     session,
     players,
     onlineUserIds,
+    playerPresence,
     loading,
     error,
     refetch: () => refetchAll('manual'),
