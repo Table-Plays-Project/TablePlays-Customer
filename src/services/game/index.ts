@@ -13,6 +13,7 @@ export type {
 export type { PresenceState, SessionChannelCallbacks } from './sessions';
 
 export {
+  addManualPlayer,
   createGameSession,
   findActiveSession,
   joinGameSession,

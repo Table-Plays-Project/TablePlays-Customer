@@ -148,15 +148,8 @@ export default function SpinWheelPage(): JSX.Element {
     if (__DEV__) console.log('[Screen] SpinWheelPage MOUNTED');
     return () => {
       if (__DEV__) console.log('[Screen] SpinWheelPage UNMOUNTED');
-      if (!navigatedAway.current && sessionId) {
-        if (isHost) {
-          cancelGameSession(sessionId).catch(() => {});
-        } else {
-          leaveGameSession(sessionId).catch(() => {});
-        }
-      }
     };
-  }, [sessionId, isHost]);
+  }, []);
 
   // Background > 10 seconds → auto-redirect.
   // Host: cancel session + go to lobby. Player: leave + go to dashboard.
@@ -213,6 +206,17 @@ export default function SpinWheelPage(): JSX.Element {
       } as never);
     }
   }, [session?.status, sessionId, isHost]);
+
+  // Kicked detection — same as lobby
+  useEffect(() => {
+    if (navigatedAway.current || !user || players.length === 0) return;
+    const stillInGame = players.some((p) => p.user_id === user.id);
+    if (!stillInGame && session?.status && session.status !== 'finished' && session.status !== 'abandoned') {
+      navigatedAway.current = true;
+      Alert.alert('Removed', 'You have been removed from the game by the host.');
+      router.replace('/(private)/dashboard/page');
+    }
+  }, [players, user, session?.status]);
 
   useEffect(() => {
     if (navigatedAway.current) return;
@@ -310,17 +314,20 @@ export default function SpinWheelPage(): JSX.Element {
     return result;
   }, [players, user?.id, profileImage, avatarUris]);
 
+  const forceNewSpinRef = useRef(false);
+
   const requestWinner = useCallback(async (): Promise<number> => {
+    // Host tapped "Spin Again" after a round resolved — force a fresh RPC
+    // even if isEscapeContinuation is true (stale excluded_payer_ids from
+    // the just-finished round haven't cleared yet in polled state).
+    const forceFresh = forceNewSpinRef.current;
+    forceNewSpinRef.current = false;
+
     // Joiner: use the server-determined index already in game_state.
-    // Never call the RPC from the joiner — it would pick a DIFFERENT
-    // winner than what the host triggered.
-    //
-    // Escape continuation (host included): the current payer_index was
-    // produced by submit_escape_answer's internal re-spin, not a fresh
-    // top-level spin. Calling spin_wheel here would start an unrelated
-    // brand new round and wipe the exclusion list — every device must
-    // just animate to the already-known cached index instead.
+    // Escape continuation (host included): animate to the already-known
+    // index from submit_escape_answer's internal re-spin.
     if (
+      !forceFresh &&
       (!isHost || isEscapeContinuation) &&
       payerIndex !== null &&
       payerIndex < players.length
@@ -328,9 +335,6 @@ export default function SpinWheelPage(): JSX.Element {
       return payerIndex;
     }
 
-    // Host, fresh top-level spin: always call the RPC.
-    // The cached payerIndex is the PREVIOUS winner — re-spin needs a
-    // fresh server call to determine a new one.
     if (!sessionId) throw new Error('No session');
     const result = await spinWheel(sessionId);
     if (result.error || result.payerIndex === null) {
@@ -420,11 +424,12 @@ export default function SpinWheelPage(): JSX.Element {
 
   const handleResult = useCallback(
     (_payerIdx: number): void => {
-      // Don't auto-finish here — status stays 'spinning' so host
-      // can tap "Spin Again" for another round. The host finishes
-      // the game explicitly via the back button or "Done" in the modal.
+      // After a round resolves, the next host-initiated spin must call
+      // the RPC fresh, even if isEscapeContinuation is still true from
+      // stale polled state.
+      if (isHost) forceNewSpinRef.current = true;
     },
-    [],
+    [isHost],
   );
 
   const handleSubmitEscapeAnswer = useCallback(
@@ -488,6 +493,7 @@ export default function SpinWheelPage(): JSX.Element {
   // the timestamp freezes, and we detect staleness from the polled
   // player data. No Presence dependency — pure database.
   const OFFLINE_THRESHOLD_MS = 10_000;
+  const GRACE_MS = 15_000;
   const [offlineTick, setOfflineTick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setOfflineTick((v) => v + 1), 3000);
@@ -500,6 +506,8 @@ export default function SpinWheelPage(): JSX.Element {
       if (p.user_id === user?.id) return false;
       if (!p.user_id) return false;
       if (!p.last_active_at) return false;
+      const joinedAgo = now - new Date(p.created_at).getTime();
+      if (joinedAgo < GRACE_MS) return false;
       return now - new Date(p.last_active_at).getTime() > OFFLINE_THRESHOLD_MS;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -581,6 +589,7 @@ export default function SpinWheelPage(): JSX.Element {
     challengeStep !== null &&
     challengeDeadline ? (
       <EscapeChallenge
+        key={`${challengeDeadline}-${spinStartedAt}`}
         start={challengeStart}
         step={challengeStep}
         deadline={challengeDeadline}

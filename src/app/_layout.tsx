@@ -89,6 +89,11 @@ export default function RootLayout(): JSX.Element | null {
 }
 
 let splashShownOnce = false;
+let showingSuccessScreen = false;
+
+export function setShowingSuccessScreen(value: boolean): void {
+  showingSuccessScreen = value;
+}
 
 function MainLayout(): JSX.Element {
   const { user, setAuth } = AuthContext.useAuth();
@@ -256,10 +261,12 @@ function MainLayout(): JSX.Element {
         const isGoogle = sessionUser.app_metadata?.provider === 'google';
 
         function navigateToDashboard(): void {
+          if (showingSuccessScreen) return;
           if (isGoogle) {
             const uid = sessionUser.id;
             const key = `welcome_shown_${uid}`;
             AsyncStorage.getItem(key).then((shown) => {
+              if (showingSuccessScreen) return;
               if (!shown) {
                 AsyncStorage.setItem(key, '1');
                 router.replace({
@@ -283,22 +290,26 @@ function MainLayout(): JSX.Element {
         if (session && isAnonymous) {
           setAuth(session.user as CurrentUser);
         } else if (session && session.user?.email_confirmed_at) {
-          setAuth(session.user as CurrentUser);
-          // Navigate immediately — never block on the device check.
-          // If another device took over, the Realtime subscription or
-          // next foreground check will evict cleanly with a message.
-          router.replace('/(private)/dashboard/page');
-          getDeviceId()
-            .then(async (deviceId) => {
-              deviceIdRef.current = deviceId;
-              const isActive = await checkDeviceActive(deviceId);
-              if (!isActive) {
-                startEviction();
-              } else {
-                await registerDevice(deviceId);
-              }
-            })
-            .catch(() => {});
+          // Verify user still exists server-side (cached JWT may outlive a deleted account)
+          supabase.auth.getUser().then(({ error: userErr }) => {
+            if (userErr) {
+              supabase.auth.signOut();
+              return;
+            }
+            setAuth(session.user as CurrentUser);
+            router.replace('/(private)/dashboard/page');
+            getDeviceId()
+              .then(async (deviceId) => {
+                deviceIdRef.current = deviceId;
+                const isActive = await checkDeviceActive(deviceId);
+                if (!isActive) {
+                  startEviction();
+                } else {
+                  await registerDevice(deviceId);
+                }
+              })
+              .catch(() => {});
+          });
         } else {
           setAuth(null);
           router.replace('/(public)/(auth)/signin/page');

@@ -168,6 +168,26 @@ export async function kickOfflinePlayer(
   }
 }
 
+export async function addManualPlayer(
+  sessionId: string,
+  playerName: string,
+): Promise<{ playerId: string | null; error: GameSessionError | null }> {
+  try {
+    const { data, error } = await supabase.rpc('add_manual_player', {
+      p_session_id: sessionId,
+      p_player_name: playerName,
+    });
+    if (error) {
+      return { playerId: null, error: safeErrorMessage(error, 'Failed to add player.') };
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    return { playerId: row?.player_id ?? null, error: null };
+  } catch (e) {
+    console.error('addManualPlayer failed:', e);
+    return { playerId: null, error: { message: 'Failed to add player.', code: null } };
+  }
+}
+
 export async function startGame(
   sessionId: string,
 ): Promise<{ error: GameSessionError | null }> {
@@ -221,13 +241,7 @@ export async function leaveAllActiveSessions(): Promise<void> {
 
 export async function sendHeartbeat(sessionId: string): Promise<void> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    await supabase
-      .from('session_players')
-      .update({ last_active_at: new Date().toISOString() })
-      .eq('session_id', sessionId)
-      .eq('user_id', user.id);
+    await supabase.rpc('player_heartbeat', { p_session_id: sessionId });
   } catch {
     // Non-critical — next tick retries
   }

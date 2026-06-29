@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { setShowingSuccessScreen } from '@/app/_layout';
 import AppBackground from '@/components/AppBackground';
 import BubbleHeading from '@/components/BubbleHeading';
 import { ActionButton, NavigationButton } from '@/components/buttons';
@@ -70,6 +71,7 @@ export default function VerifyOtpPage(): JSX.Element {
         return;
       }
       if (flow === 'signup') {
+        setShowingSuccessScreen(true);
         router.replace({
           pathname: '/(public)/(auth)/success/page',
           params: { flow: 'signup' },

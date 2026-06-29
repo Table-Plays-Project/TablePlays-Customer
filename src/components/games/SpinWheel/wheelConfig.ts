@@ -135,7 +135,7 @@ export const WHEEL_FONTS = {
 } as const;
 
 export const PLAYER_MIN = 2;
-export const PLAYER_MAX = 4;
+export const PLAYER_MAX = 8;
 
 /* ---- escape challenge ----
    Server is authoritative on timing (challenge_deadline is an absolute

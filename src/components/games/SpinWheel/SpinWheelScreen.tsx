@@ -25,6 +25,7 @@ import {
   ActivityIndicator,
   Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -301,7 +302,11 @@ export function SpinWheelScreen({
             <Text style={styles.statusBannerText}>{statusMessage}</Text>
           </View>
         ) : null}
-        <View style={styles.playersRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.playersRow}
+        >
           {players.map((player) => (
             <View key={player.id} style={styles.playerSlot}>
               <View style={styles.playerBubble}>
@@ -317,12 +322,16 @@ export function SpinWheelScreen({
                   </Text>
                 )}
               </View>
-              <Text style={styles.playerLabel} maxFontSizeMultiplier={1.2}>
+              <Text
+                style={styles.playerLabel}
+                maxFontSizeMultiplier={1.2}
+                numberOfLines={1}
+              >
                 {player.name}
               </Text>
             </View>
           ))}
-        </View>
+        </ScrollView>
       </View>
     </View>
   );
@@ -490,10 +499,12 @@ const styles = StyleSheet.create({
   playersRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 20,
+    gap: 14,
+    paddingHorizontal: 16,
   },
   playerSlot: {
     alignItems: 'center',
+    width: 56,
   },
   playerBubble: {
     width: 48,

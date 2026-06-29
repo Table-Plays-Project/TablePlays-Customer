@@ -11,27 +11,37 @@ import {
   Pressable,
   SafeAreaView,
   ScrollView,
+  StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path } from 'react-native-svg';
+import * as Linking from 'expo-linking';
+import QRCode from 'react-native-qrcode-svg';
 
 import AppBackground from '@/components/AppBackground';
 import BubbleHeading from '@/components/BubbleHeading';
-import { NavigationButton } from '@/components/buttons';
 import AuthContext from '@/contexts/auth';
 import useGameSession from '@/hooks/game/useGameSession';
 import {
   cancelGameSession,
+  kickOfflinePlayer,
   leaveGameSession,
   startGame,
 } from '@/services/game';
-import { colors, fontSize } from '@/constants/theme';
+import { colors } from '@/constants/theme';
 
 import styles from './styles';
 
 function initialsFor(name: string): string {
   return name.trim().charAt(0).toUpperCase() || '?';
+}
+
+function navigateToDashboard(): void {
+  router.replace('/(private)/dashboard/page');
 }
 
 function navigateToWheel(sid: string): void {
@@ -41,8 +51,32 @@ function navigateToWheel(sid: string): void {
   } as never);
 }
 
-function navigateToDashboard(): void {
-  router.replace('/(private)/dashboard/page');
+// ── Custom Trash Icon ──
+function TrashIcon(): React.JSX.Element {
+  return (
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+      <Path d="M3 6h18" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" />
+      <Path d="M8 6V4h8v2" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M5 6l1 14h12l1-14" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M10 11v6" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" />
+      <Path d="M14 11v6" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+// ── Toggle Pill (OUT indicator) ──
+function TogglePill({ onPress }: { onPress: () => void }): React.JSX.Element {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.togglePill, pressed && { opacity: 0.7 }]}
+      accessibilityRole="button"
+      accessibilityLabel="Toggle player out"
+    >
+      <View style={styles.toggleThumb} />
+      <Text style={styles.toggleText}>OUT</Text>
+    </Pressable>
+  );
 }
 
 export default function LobbyPage(): JSX.Element {
@@ -60,10 +94,15 @@ export default function LobbyPage(): JSX.Element {
       accountName,
     );
   const [actionLoading, setActionLoading] = useState(false);
+  const [billAmount, setBillAmount] = useState('');
+  const [toggledIds, setToggledIds] = useState<Set<string>>(new Set());
+  const kickedNamesRef = useRef<Set<string>>(new Set());
   const isHost = session?.host_id === user?.id;
   const navigatedRef = useRef(false);
 
+  // ── Offline detection (heartbeat-based) ──
   const OFFLINE_MS = 10_000;
+  const GRACE_MS = 15_000;
   const [offTick, setOffTick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setOffTick((v) => v + 1), 3000);
@@ -74,29 +113,26 @@ export default function LobbyPage(): JSX.Element {
     const map = new Map<string, boolean>();
     players.forEach((p) => {
       if (p.user_id === user?.id) { map.set(p.id, false); return; }
+      if (!p.user_id) { map.set(p.id, false); return; }
       if (!p.last_active_at) { map.set(p.id, false); return; }
+      const joinedAgo = now - new Date(p.created_at).getTime();
+      if (joinedAgo < GRACE_MS) { map.set(p.id, false); return; }
       map.set(p.id, now - new Date(p.last_active_at).getTime() > OFFLINE_MS);
     });
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [players, user?.id, offTick]);
-
   const anyOffline = Array.from(isPlayerOffline.values()).some(Boolean);
 
+  // ── Lifecycle logging ──
   useEffect(() => {
     if (__DEV__) console.log('[Screen] LobbyPage MOUNTED');
     return () => {
       if (__DEV__) console.log('[Screen] LobbyPage UNMOUNTED');
-      if (!navigatedRef.current && sessionId) {
-        if (isHost) {
-          cancelGameSession(sessionId).catch(() => {});
-        } else {
-          leaveGameSession(sessionId).catch(() => {});
-        }
-      }
     };
-  }, [sessionId, isHost]);
+  }, []);
 
+  // ── Host background cleanup ──
   const bgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!isHost || !sessionId) return;
@@ -121,40 +157,76 @@ export default function LobbyPage(): JSX.Element {
     };
   }, [isHost, sessionId]);
 
-  // Detect host disconnect via presence — if host leaves, redirect
-  const hostId = session?.host_id;
+  // ── Kicked detection ──
   useEffect(() => {
-    if (navigatedRef.current || !hostId || isHost) return;
-    if (onlineUserIds.length > 0 && !onlineUserIds.includes(hostId)) {
-      if (__DEV__) console.log('[Presence] Host disconnected — leaving');
+    if (navigatedRef.current || !user || players.length === 0) return;
+    const stillInGame = players.some((p) => p.user_id === user.id);
+    if (!stillInGame && session?.status && session.status !== 'finished' && session.status !== 'abandoned') {
       navigatedRef.current = true;
+      Alert.alert('Removed', 'You have been removed from the game by the host.');
       navigateToDashboard();
     }
-  }, [onlineUserIds, hostId, isHost]);
+  }, [players, user, session?.status]);
 
+  // ── Auto-navigate on status change ──
   useEffect(() => {
     if (navigatedRef.current || !sessionId) return;
     const status = session?.status;
     if ((status === 'active' || status === 'spinning') && players.length >= 2) {
       navigatedRef.current = true;
-      if (__DEV__) console.log('[Screen] LobbyPage → navigating to SpinWheel');
       navigateToWheel(sessionId);
     }
     if (status === 'abandoned' || status === 'finished') {
       navigatedRef.current = true;
-      if (__DEV__) console.log('[Screen] LobbyPage → navigating to Dashboard (session ended)');
       navigateToDashboard();
     }
   }, [session?.status, sessionId, players.length]);
 
+  // ── Android hardware back ──
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleExit();
+      return true;
+    });
+    return () => sub.remove();
+  });
+
+  // ── Player change tracking ──
+  const playerKey = useMemo(
+    () => players.map((p) => p.id).join(','),
+    [players],
+  );
+  const prevCountRef = useRef(players.length);
+  const prevNamesRef = useRef<string[]>([]);
+  useEffect(() => {
+    const prevCount = prevCountRef.current;
+    const prevNames = prevNamesRef.current;
+    const currentNames = players.map((p) => p.player_name);
+    if (prevCount > 0 && players.length < prevCount) {
+      const left = prevNames.filter((n) => !currentNames.includes(n));
+      if (left.length > 0 && isHost) {
+        const kicked = left.filter((n) => kickedNamesRef.current.has(n));
+        const departed = left.filter((n) => !kickedNamesRef.current.has(n));
+        if (kicked.length > 0) {
+          Alert.alert('Player Removed', `${kicked.join(', ')} has been removed.`);
+          kicked.forEach((n) => kickedNamesRef.current.delete(n));
+        }
+        if (departed.length > 0) {
+          Alert.alert('Player Left', `${departed.join(', ')} left the game.`);
+        }
+      }
+    }
+    prevCountRef.current = players.length;
+    prevNamesRef.current = currentNames;
+  }, [playerKey, isHost]);
+
+  // ── Actions ──
   async function doHostExit(): Promise<void> {
     if (actionLoading) return;
     setActionLoading(true);
     try {
       if (sessionId) await cancelGameSession(sessionId);
-    } catch {
-      // Best-effort
-    }
+    } catch { /* best-effort */ }
     navigateToDashboard();
   }
 
@@ -163,9 +235,7 @@ export default function LobbyPage(): JSX.Element {
     setActionLoading(true);
     try {
       if (sessionId) await leaveGameSession(sessionId);
-    } catch {
-      // Best-effort
-    }
+    } catch { /* best-effort */ }
     navigateToDashboard();
   }
 
@@ -184,13 +254,38 @@ export default function LobbyPage(): JSX.Element {
     );
   }
 
-  useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      handleExit();
-      return true;
+  function handleKickPlayer(playerId: string, playerName: string): void {
+    if (!sessionId) return;
+    Alert.alert(
+      'Remove Player',
+      `Remove ${playerName} from the game?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            kickedNamesRef.current.add(playerName);
+            const result = await kickOfflinePlayer(sessionId, playerId);
+            if (result.error) {
+              kickedNamesRef.current.delete(playerName);
+              if (__DEV__) console.log(`[Kick] FAILED: ${result.error.message}`);
+              Alert.alert('Error', result.error.message);
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  function togglePlayer(playerId: string): void {
+    setToggledIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(playerId)) next.delete(playerId);
+      else next.add(playerId);
+      return next;
     });
-    return () => sub.remove();
-  });
+  }
 
   async function handleStartGame(): Promise<void> {
     if (!sessionId || actionLoading) return;
@@ -200,7 +295,7 @@ export default function LobbyPage(): JSX.Element {
       if (startError) {
         setActionLoading(false);
         if (Platform.OS === 'web') {
-          alert(startError.message);
+          Alert.alert('Error', startError.message);
         } else {
           Alert.alert('Error', startError.message);
         }
@@ -220,91 +315,137 @@ export default function LobbyPage(): JSX.Element {
 
   return (
     <AppBackground>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safe}>
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          style={styles.scrollView}
+          contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.header}>
-            <NavigationButton
-              onPress={handleExit}
-              arrow="arrow-back"
+          {/* Back button */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.backBtn,
+              pressed && { opacity: 0.6 },
+            ]}
+            onPress={handleExit}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+          >
+            <Ionicons name="chevron-back" size={20} color="#fff" />
+          </Pressable>
+
+          {/* QR Code — coral background, white QR, encodes deep link */}
+          <View style={styles.qrCard}>
+            <QRCode
+              value={Linking.createURL('(private)/joinSession/page', {
+                queryParams: { mode: 'join', code: roomCode },
+              })}
+              size={148}
+              color="#FFFFFF"
+              backgroundColor="transparent"
             />
-            <BubbleHeading
-              text="GAME LOBBY"
-              fontSize={fontSize['2xl']}
-              align="center"
-            />
-            <View style={styles.headerSpacer} />
           </View>
 
-          <View style={styles.roomCodeCard}>
-            <Text style={styles.roomCodeLabel}>ROOM CODE</Text>
-            <Text style={styles.roomCodeValue}>{roomCode}</Text>
-            <Text style={styles.roomCodeHint}>
-              Share this code with friends to join
-            </Text>
+          {/* Room Code */}
+          <Text style={styles.roomLabel}>ROOM CODE</Text>
+          <Text style={styles.roomCode}>{roomCode}</Text>
+
+          {/* Bill Amount Input */}
+          <View style={{ width: '100%', marginBottom: 16 }}>
+            <Text style={styles.optionalText}>OPTIONAL</Text>
+            <View style={styles.billInput}>
+              <Ionicons
+                name="receipt-outline"
+                size={18}
+                color="#4A6CF7"
+                style={styles.billIcon}
+              />
+              <TextInput
+                style={styles.billText}
+                placeholder="Pop in the bill amount"
+                placeholderTextColor="#bbb"
+                keyboardType="numeric"
+                value={billAmount}
+                onChangeText={setBillAmount}
+              />
+            </View>
           </View>
 
           {error ? (
             <View style={styles.errorBanner}>
-              <Ionicons
-                name="alert-circle"
-                size={18}
-                color={colors.textInverse}
-              />
+              <Ionicons name="alert-circle" size={18} color="#fff" />
               <Text style={styles.errorText}>{error}</Text>
-              <Pressable onPress={refetch} style={styles.retryButton}>
-                <Text style={styles.retryText}>Retry</Text>
-              </Pressable>
             </View>
           ) : null}
 
-          <Text style={styles.sectionTitle}>PLAYERS ({players.length})</Text>
+          {/* Players Card */}
+          <View style={styles.playersCard}>
+            <Text style={styles.playersLabel}>
+              PLAYER • {players.length}
+            </Text>
 
-          {loading ? (
-            <ActivityIndicator
-              size="large"
-              color={colors.textInverse}
-              style={styles.loadingIndicator}
-            />
-          ) : (
-            <View style={styles.playersList}>
-              {players.map((player) => (
+            {loading ? (
+              <ActivityIndicator
+                size="large"
+                color={colors.ctaSolid}
+                style={styles.loadingIndicator}
+              />
+            ) : (
+              players.map((player) => (
                 <View
                   key={player.id}
                   style={[
-                    styles.playerRow,
+                    styles.rowWrapper,
                     isPlayerOffline.get(player.id) && styles.playerRowOffline,
                   ]}
                 >
-                  <View
-                    style={[
-                      styles.playerAvatar,
-                      isPlayerOffline.get(player.id) && styles.playerAvatarOffline,
-                    ]}
-                  >
-                    <Text style={styles.playerAvatarText}>
-                      {initialsFor(player.player_name)}
-                    </Text>
-                  </View>
-                  <View style={styles.playerNameWrap}>
-                    <Text style={styles.playerName}>{player.player_name}</Text>
+                  <View style={styles.playerRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.playerName}>
+                        {player.player_name}
+                      </Text>
+                    </View>
+
+                    {/* Offline badge — same style as Host badge */}
                     {isPlayerOffline.get(player.id) ? (
-                      <Text style={styles.offlineLabel}>OFFLINE</Text>
+                      <View style={styles.offlineBadge}>
+                        <Text style={styles.offlineBadgeText}>Offline</Text>
+                      </View>
+                    ) : null}
+
+                    {/* Host badge */}
+                    {player.is_host ? (
+                      <View style={styles.hostBadge}>
+                        <Text style={styles.hostBadgeText}>Host</Text>
+                      </View>
+                    ) : null}
+
+                    {/* Trash icon — non-host rows only */}
+                    {!player.is_host ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${player.player_name}`}
+                        onPress={() =>
+                          handleKickPlayer(player.id, player.player_name)
+                        }
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                        style={({ pressed }) => [pressed && { opacity: 0.5 }]}
+                      >
+                        <TrashIcon />
+                      </Pressable>
                     ) : null}
                   </View>
-                  {player.is_host ? (
-                    <View style={styles.hostBadge}>
-                      <Text style={styles.hostBadgeText}>HOST</Text>
-                    </View>
+
+                  {/* Toggle pill — floats outside right edge */}
+                  {isHost && toggledIds.has(player.id) ? (
+                    <TogglePill onPress={() => togglePlayer(player.id)} />
                   ) : null}
                 </View>
-              ))}
-            </View>
-          )}
+              ))
+            )}
+          </View>
 
+          {/* Waiting (non-host) */}
+          {/* Waiting star — non-host only, sits above button */}
           {session && !isHost && !actionLoading ? (
             <View style={styles.waitingWrap}>
               <Image
@@ -312,37 +453,64 @@ export default function LobbyPage(): JSX.Element {
                 style={styles.waitingStar}
                 resizeMode="contain"
               />
-              <Text style={styles.waitingText}>
-                Waiting for host to start...
-              </Text>
             </View>
           ) : null}
 
+          {/* START GAME / WAITING button */}
           <Pressable
             disabled={!canStart}
             onPress={handleStartGame}
             style={({ pressed }) => [
-              styles.startButton,
-              !canStart && styles.startButtonDisabled,
-              pressed && canStart && styles.startButtonPressed,
+              { width: '100%' },
+              pressed && canStart && { opacity: 0.85, transform: [{ scale: 0.98 }] },
             ]}
           >
-            {actionLoading ? (
-              <ActivityIndicator size="small" color={colors.textInverse} />
-            ) : (
-              <Text style={styles.startButtonText}>
-                {!isHost
-                  ? 'WAITING FOR HOST...'
-                  : players.length < 2
-                    ? 'NEED 2+ PLAYERS'
-                    : anyOffline
-                      ? 'WAITING FOR PLAYERS...'
-                      : 'START GAME'}
-              </Text>
-            )}
+            <LinearGradient
+              colors={canStart ? ['#F4736A', '#E8556A'] : ['#F4736A88', '#E8556A88']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[
+                styles.startBtn,
+                !canStart && styles.startBtnDisabled,
+              ]}
+            >
+              {actionLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.startBtnText}>
+                  {!isHost
+                    ? 'WAITING FOR HOST...'
+                    : players.length < 2
+                      ? 'NEED 2+ PLAYERS'
+                      : anyOffline
+                        ? 'WAITING FOR PLAYERS...'
+                        : '+ START GAME'}
+                </Text>
+              )}
+            </LinearGradient>
           </Pressable>
+
+          {/* ADD MORE PLAYER — host only */}
+          {isHost ? (
+            <Pressable
+              style={({ pressed }) => [
+                styles.addBtn,
+                pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] },
+              ]}
+              onPress={() =>
+                sessionId &&
+                router.push({
+                  pathname: '/(private)/addPlayer/page',
+                  params: { sessionId },
+                } as never)
+              }
+            >
+              <Text style={styles.addBtnText}>ADD MORE PLAYER</Text>
+            </Pressable>
+          ) : null}
         </ScrollView>
       </SafeAreaView>
     </AppBackground>
   );
 }
+

@@ -93,9 +93,6 @@ export default function useGameSession(
     try {
       const result = await fetchSessionPlayers(sessionId);
       if (!result.error) {
-        if (__DEV__) {
-          console.log(`[GameSession] refetchPlayers: ${result.players.length} players`);
-        }
         setPlayers(result.players);
       }
     } catch {
@@ -156,6 +153,7 @@ export default function useGameSession(
     setLoading(true);
     if (__DEV__) console.log(`[GameSession] hook effect START (session=${sessionId})`);
     refetchAllRef.current('initial');
+    sendHeartbeat(sessionId);
 
     const presenceTrack: PresenceState | undefined =
       trackUserId && trackPlayerName

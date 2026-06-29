@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaView, ScrollView } from 'react-native';
 
+import { setShowingSuccessScreen } from '@/app/_layout';
 import AppBackground from '@/components/AppBackground';
 import SuccessMascot from '@/components/SuccessMascot';
 
@@ -41,6 +42,7 @@ export default function SuccessPage(): JSX.Element {
   };
 
   function handleDone(): void {
+    setShowingSuccessScreen(false);
     if (flow === 'welcome') {
       router.replace('/(private)/dashboard/page');
     } else {
