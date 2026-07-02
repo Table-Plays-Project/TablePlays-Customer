@@ -42,7 +42,9 @@ const styles = StyleSheet.create({
   gameCard: {
     width: '47%',
     flexGrow: 1,
-    backgroundColor: colors.ctaSolid,
+    backgroundColor: 'rgba(244,115,106,0.7)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(244,115,106,0.85)',
     borderRadius: borderRadius.xl,
     paddingVertical: spacing[6],
     paddingHorizontal: spacing[4],
@@ -51,9 +53,9 @@ const styles = StyleSheet.create({
     minHeight: 130,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
   },
   gameCardDisabled: {
     opacity: 0.55,

@@ -162,6 +162,7 @@ export function SpinWheelScreen({
   onSubmitEscapeAnswer,
   onChallengeReady,
   statusMessage,
+  billAmount,
 }: SpinWheelScreenProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
@@ -292,6 +293,7 @@ export function SpinWheelScreen({
             challengeDeadline={challengeDeadline}
             onSubmitEscapeAnswer={onSubmitEscapeAnswer}
             onChallengeReady={onChallengeReady}
+            billAmount={billAmount}
           />
         )}
       </View>

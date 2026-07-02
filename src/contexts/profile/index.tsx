@@ -12,6 +12,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import AuthContext from '@/contexts/auth';
 import { getAvatarById } from '@/constants/avatars';
+import { supabase } from '@/lib/supabase';
 
 const AVATAR_KEY_PREFIX = 'selected_avatar_';
 const IMAGE_KEY_PREFIX = 'profile_image_';
@@ -75,8 +76,17 @@ function ProfileProvider({ children }: { children: ReactNode }): JSX.Element {
       } catch (e) {
         console.error('Failed to save avatar:', e);
       }
+      if (userId) {
+        supabase
+          .from('profiles')
+          .update({ avatar_id: id })
+          .eq('user_id', userId)
+          .then(({ error }) => {
+            if (error) console.error('Failed to sync avatar_id to profiles:', error.message);
+          });
+      }
     },
-    [avatarKey, imageKey],
+    [avatarKey, imageKey, userId],
   );
 
   const setProfileImage = useCallback(

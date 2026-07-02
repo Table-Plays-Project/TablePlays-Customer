@@ -100,6 +100,7 @@ function MainLayout(): JSX.Element {
   const colorScheme = useColorScheme();
   const [showSplash, setShowSplash] = useState(!splashShownOnce);
   const [evicting, setEvicting] = useState(false);
+  const evictingRef = useRef(false);
   const deviceIdRef = useRef<string | null>(null);
 
   async function handleDeviceConflictOnSignIn(
@@ -143,22 +144,30 @@ function MainLayout(): JSX.Element {
   }, []);
 
   function startEviction(): void {
-    if (evicting) return;
+    // Read from ref, not state — effects capture startEviction at closure
+    // creation time, so the state value they see can be stale. The ref is
+    // always current regardless of when the callback fires.
+    if (evictingRef.current) return;
+    evictingRef.current = true;
     setEvicting(true);
     setTimeout(() => {
-      supabase.auth.signOut().finally(() => setEvicting(false));
+      supabase.auth.signOut().finally(() => {
+        evictingRef.current = false;
+        setEvicting(false);
+      });
     }, 3000);
   }
 
   // Polling timer (5s) — primary deterministic eviction mechanism.
+  // deviceId is read inside the callback (not captured at effect start) so
+  // the race between getDeviceId() resolving and user state changing is
+  // avoided — by the time the first tick fires (5s later) the ref is set.
   useEffect(() => {
     if (!user || user.is_anonymous) return;
-    const deviceId = deviceIdRef.current;
-    if (!deviceId) return;
-    const safeDeviceId: string = deviceId;
-
     const timer = setInterval(async () => {
-      const isActive = await checkDeviceActive(safeDeviceId);
+      const deviceId = deviceIdRef.current;
+      if (!deviceId) return;
+      const isActive = await checkDeviceActive(deviceId);
       if (!isActive) startEviction();
     }, 5_000);
     return () => clearInterval(timer);
@@ -181,10 +190,11 @@ function MainLayout(): JSX.Element {
   }, [user]);
 
   // Realtime — catches takeover instantly when websocket is alive.
+  // The deviceId early-return was removed: the filter uses user.id (always
+  // available here) and the deviceId is read inside the event callback where
+  // the ref is guaranteed to be set (events fire after async subscription).
   useEffect(() => {
     if (!user || user.is_anonymous) return;
-    const deviceId = deviceIdRef.current;
-    if (!deviceId) return;
 
     const channel = supabase
       .channel('active-device-watch')
@@ -199,7 +209,8 @@ function MainLayout(): JSX.Element {
         (payload) => {
           const newDeviceId = (payload.new as { device_id?: string })
             ?.device_id;
-          if (newDeviceId && newDeviceId !== deviceId) {
+          const currentDeviceId = deviceIdRef.current;
+          if (newDeviceId && currentDeviceId && newDeviceId !== currentDeviceId) {
             startEviction();
           }
         },
@@ -290,11 +301,17 @@ function MainLayout(): JSX.Element {
         if (session && isAnonymous) {
           setAuth(session.user as CurrentUser);
         } else if (session && session.user?.email_confirmed_at) {
-          // Verify user still exists server-side (cached JWT may outlive a deleted account)
+          // Verify user still exists server-side (cached JWT may outlive a deleted account).
+          // Only sign out on HTTP 401 (session genuinely invalid). Any other error
+          // (network timeout, Expo Go tunnel latency, etc.) is transient — signing out
+          // on a network blip would log the user out for no reason.
           supabase.auth.getUser().then(({ error: userErr }) => {
             if (userErr) {
-              supabase.auth.signOut();
-              return;
+              if (userErr.status === 401) {
+                supabase.auth.signOut();
+                return;
+              }
+              // Transient error — keep the local session and proceed.
             }
             setAuth(session.user as CurrentUser);
             router.replace('/(private)/dashboard/page');

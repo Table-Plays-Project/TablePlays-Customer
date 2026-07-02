@@ -270,6 +270,7 @@ function SpinWheelComponent({
   challengeStep = null,
   challengeDeadline = null,
   onSubmitEscapeAnswer,
+  billAmount,
 }: SpinWheelProps): React.JSX.Element {
   const count = players.length;
   const rotation = useSharedValue(0);
@@ -700,6 +701,7 @@ function SpinWheelComponent({
         onSpinAgain={spinAgain}
         onClose={closeModal}
         canSpin={canSpin}
+        billAmount={billAmount}
       />
     </View>
   );

@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { Image, Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import AppBackground from '@/components/AppBackground';
@@ -10,14 +10,15 @@ import { colors, fontSize } from '@/constants/theme';
 import styles from './styles';
 
 type GameOption = {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon?: keyof typeof Ionicons.glyphMap;
+  image?: number;
   label: string;
   route?: string;
 };
 
 const GAMES: GameOption[] = [
   {
-    icon: 'sync-circle',
+    image: require('@/assets/images/spin-wheel-icon.png'),
     label: 'Spinning\nWheel',
     route: '/(private)/joinSession/page',
   },
@@ -50,7 +51,7 @@ export default function SelectGame(): JSX.Element {
             />
             <BubbleHeading
               text="SELECT GAME"
-              fontSize={fontSize['2xl']}
+              fontSize={fontSize['4xl']}
               align="center"
             />
             <View style={styles.headerSpacer} />
@@ -75,14 +76,24 @@ export default function SelectGame(): JSX.Element {
                     pressed && isActive && styles.gameCardPressed,
                   ]}
                 >
-                  <View style={styles.iconWrap}>
-                    <Ionicons
-                      name={game.icon}
-                      size={32}
-                      color={colors.textInverse}
-                      style={styles.iconShadow}
+                  {game.image ? (
+                    <Image
+                      source={game.image}
+                      style={{ width: 100, height: 100, marginBottom: 6 }}
+                      resizeMode="contain"
                     />
-                  </View>
+                  ) : (
+                    <View style={styles.iconWrap}>
+                      {game.icon ? (
+                        <Ionicons
+                          name={game.icon}
+                          size={32}
+                          color={colors.textInverse}
+                          style={styles.iconShadow}
+                        />
+                      ) : null}
+                    </View>
+                  )}
                   <Text
                     style={[
                       styles.gameLabel,

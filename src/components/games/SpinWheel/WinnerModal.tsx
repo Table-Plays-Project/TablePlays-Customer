@@ -44,6 +44,7 @@ function WinnerModalComponent({
   onSpinAgain,
   onClose,
   canSpin = true,
+  billAmount,
 }: WinnerModalProps): React.JSX.Element | null {
   const shown = useSharedValue(0);
 
@@ -109,7 +110,11 @@ function WinnerModalComponent({
         <Text style={styles.name} numberOfLines={1} maxFontSizeMultiplier={1.2}>
           {winner.name}
         </Text>
-        <Text style={styles.sub}>{'PAYS THE BILL!'}</Text>
+        <Text style={styles.sub}>
+          {billAmount && billAmount > 0
+            ? `PAYS ${billAmount % 1 === 0 ? billAmount : billAmount.toFixed(2)}`
+            : 'PAYS THE BILL!'}
+        </Text>
 
         {canSpin ? (
           <Pressable

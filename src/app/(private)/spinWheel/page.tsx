@@ -581,6 +581,7 @@ export default function SpinWheelPage(): JSX.Element {
           ? `${offlinePlayers.map((p) => p.player_name).join(', ')} is not here`
           : null
       }
+      billAmount={session?.bill_amount ?? null}
     />
     {showChallengeScreen &&
     challengeStatus === 'pending' &&

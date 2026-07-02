@@ -102,6 +102,17 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans_400Regular',
     paddingVertical: 0,
   },
+  billDoneBtn: {
+    backgroundColor: CORAL,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  billDoneText: {
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 13,
+    color: WHITE,
+  },
   optionalText: {
     alignSelf: 'flex-end' as const,
     fontSize: 13,
@@ -167,6 +178,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Baloo2_800ExtraBold',
     fontSize: 13,
     color: '#F4736A',
+    letterSpacing: 0.5,
+  },
+  botBadge: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  botBadgeText: {
+    fontFamily: 'Baloo2_800ExtraBold',
+    fontSize: 13,
+    color: '#7C3AED',
     letterSpacing: 0.5,
   },
   playerRowOffline: {},

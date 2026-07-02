@@ -188,6 +188,25 @@ export async function addManualPlayer(
   }
 }
 
+export async function updateBillAmount(
+  sessionId: string,
+  amount: number | null,
+): Promise<{ error: GameSessionError | null }> {
+  try {
+    const { error } = await supabase
+      .from('game_sessions')
+      .update({ bill_amount: amount })
+      .eq('id', sessionId);
+    if (error) {
+      return { error: safeErrorMessage(error, 'Failed to update bill amount.') };
+    }
+    return { error: null };
+  } catch (e) {
+    console.error('updateBillAmount failed:', e);
+    return { error: { message: 'Failed to update bill amount.', code: null } };
+  }
+}
+
 export async function startGame(
   sessionId: string,
 ): Promise<{ error: GameSessionError | null }> {

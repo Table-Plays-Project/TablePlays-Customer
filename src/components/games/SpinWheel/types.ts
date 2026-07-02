@@ -66,6 +66,7 @@ export interface SpinWheelProps {
   /** Fired when the spin animation completes AND a pending challenge
    *  exists — the page should show the escape challenge screen. */
   onChallengeReady?: () => void;
+  billAmount?: number | null;
 }
 
 export interface SpinWheelScreenProps {
@@ -90,6 +91,7 @@ export interface SpinWheelScreenProps {
   onSubmitEscapeAnswer?: (answer: number) => Promise<void>;
   onChallengeReady?: () => void;
   statusMessage?: string | null;
+  billAmount?: number | null;
 }
 
 export interface WheelFaceProps {
@@ -114,4 +116,5 @@ export interface WinnerModalProps {
   onSpinAgain: () => void;
   onClose: () => void;
   canSpin?: boolean;
+  billAmount?: number | null;
 }

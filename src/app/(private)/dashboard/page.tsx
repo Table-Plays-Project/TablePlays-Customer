@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { router } from 'expo-router';
+import { useCallback, useEffect, useRef } from 'react';
+import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import {
   Alert,
@@ -19,8 +19,10 @@ import AuthContext from '@/contexts/auth';
 import ProfileContext from '@/contexts/profile';
 import {
   findActiveSession,
+  joinGameSession,
   leaveAllActiveSessions,
 } from '@/services/game';
+import { getPendingInvites, respondToInvite } from '@/services/friends';
 
 import styles from './styles';
 
@@ -32,33 +34,44 @@ type QuickAction = {
 
 const QUICK_ACTIONS: QuickAction[] = [
   {
-    icon: 'game-controller',
-    label: 'Play\nGames',
-    route: '/(private)/selectGame/page',
+    icon: 'people',
+    label: 'Friend\nList',
+    route: '/(private)/friendList/page',
   },
   {
-    icon: 'pricetag',
-    label: 'Voucher &\nStamp Cards',
-    route: '/(private)/stampCards/page',
+    icon: 'time',
+    label: 'View\nHistory',
+    route: '/(private)/viewHistory/page',
   },
   {
     icon: 'settings-sharp',
     label: 'Settings',
     route: '/(private)/profile/page',
   },
-  { icon: 'time', label: 'View History' },
+  {
+    icon: 'pricetag',
+    label: 'Voucher &\nStamp Cards',
+    route: '/(private)/stampCards/page',
+  },
 ];
 
 export default function Dashboard(): JSX.Element {
   const { user } = AuthContext.useAuth();
   const { t } = useTranslation();
-  const { profileImage, avatarSource } = ProfileContext.useProfile();
+  const { profileImage, avatarSource, avatarId } = ProfileContext.useProfile();
 
   const firstName =
     user?.user_metadata?.first_name ?? user?.user_metadata?.name ?? '';
   const greeting = firstName ? `Hello, ${firstName}` : 'Welcome back';
 
-  // Check for active game session on mount — handles force-close rejoin
+  // Refs so the one-time mount effect below always reads the latest
+  // values inside its async Alert callbacks without needing to re-run.
+  const firstNameRef = useRef(firstName);
+  firstNameRef.current = firstName;
+  const avatarIdRef = useRef(avatarId);
+  avatarIdRef.current = avatarId;
+
+  // One-time rejoin check on mount — handles force-close / app restart
   const checkedRef = useRef(false);
   useEffect(() => {
     if (checkedRef.current || !user) return;
@@ -66,7 +79,6 @@ export default function Dashboard(): JSX.Element {
 
     findActiveSession().then(({ sessionId, status }) => {
       if (!sessionId || !status) return;
-
       Alert.alert(
         'Active Game Found',
         'You have an active game session. Would you like to rejoin?',
@@ -100,6 +112,62 @@ export default function Dashboard(): JSX.Element {
       );
     });
   }, [user]);
+
+  // Invite polling — runs on focus and every 5 s while dashboard is open.
+  // Without this, an invite sent while the dashboard is already open is
+  // never shown because the old one-time check had already fired.
+  const shownInviteIdsRef = useRef<Set<string>>(new Set());
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+
+      const checkInvites = async (): Promise<void> => {
+        const { invites } = await getPendingInvites();
+        if (invites.length === 0) return;
+        const invite = invites[0];
+        if (shownInviteIdsRef.current.has(invite.id)) return;
+        shownInviteIdsRef.current.add(invite.id);
+        const inviterName = invite.inviter_name ?? 'A friend';
+        Alert.alert(
+          "You've Been Invited!",
+          `${inviterName} has invited you to join a game on TablePlays. Ready to play?`,
+          [
+            {
+              text: 'Not Now',
+              style: 'cancel',
+              onPress: () => {
+                respondToInvite(invite.id, false).catch(() => {});
+              },
+            },
+            {
+              text: 'Join Game',
+              onPress: async () => {
+                await respondToInvite(invite.id, true);
+                const { sessionId: joinedId, error: joinErr } =
+                  await joinGameSession(
+                    invite.room_code,
+                    firstNameRef.current || 'Player',
+                    avatarIdRef.current,
+                  );
+                if (joinErr || !joinedId) {
+                  Alert.alert('Error', joinErr?.message ?? 'Failed to join game.');
+                  return;
+                }
+                router.replace({
+                  pathname: '/(private)/lobby/page',
+                  params: { sessionId: joinedId },
+                } as never);
+              },
+            },
+          ],
+        );
+      };
+
+      void checkInvites();
+      const t = setInterval(() => { void checkInvites(); }, 5000);
+      return () => clearInterval(t);
+    }, [user]),
+  );
 
   return (
     <AppBackground>

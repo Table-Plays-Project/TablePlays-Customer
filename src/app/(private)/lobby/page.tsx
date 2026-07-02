@@ -31,6 +31,7 @@ import {
   kickOfflinePlayer,
   leaveGameSession,
   startGame,
+  updateBillAmount,
 } from '@/services/game';
 import { colors } from '@/constants/theme';
 
@@ -55,11 +56,38 @@ function navigateToWheel(sid: string): void {
 function TrashIcon(): React.JSX.Element {
   return (
     <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-      <Path d="M3 6h18" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" />
-      <Path d="M8 6V4h8v2" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M5 6l1 14h12l1-14" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M10 11v6" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" />
-      <Path d="M14 11v6" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" />
+      <Path
+        d="M3 6h18"
+        stroke="#FFFFFF"
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M8 6V4h8v2"
+        stroke="#FFFFFF"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M5 6l1 14h12l1-14"
+        stroke="#FFFFFF"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M10 11v6"
+        stroke="#FFFFFF"
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M14 11v6"
+        stroke="#FFFFFF"
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
     </Svg>
   );
 }
@@ -83,22 +111,33 @@ export default function LobbyPage(): JSX.Element {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
   const { user } = AuthContext.useAuth();
   const accountName =
-    user?.user_metadata?.first_name ??
-    user?.user_metadata?.name ??
-    'Player';
+    user?.user_metadata?.first_name ?? user?.user_metadata?.name ?? 'Player';
 
   const { session, players, onlineUserIds, loading, error, refetch } =
-    useGameSession(
-      sessionId ?? null,
-      user?.id ?? null,
-      accountName,
-    );
+    useGameSession(sessionId ?? null, user?.id ?? null, accountName);
   const [actionLoading, setActionLoading] = useState(false);
   const [billAmount, setBillAmount] = useState('');
+  const billInitRef = useRef(false);
   const [toggledIds, setToggledIds] = useState<Set<string>>(new Set());
   const kickedNamesRef = useRef<Set<string>>(new Set());
   const isHost = session?.host_id === user?.id;
   const navigatedRef = useRef(false);
+
+  // Initialize bill amount from session (returning to lobby)
+  useEffect(() => {
+    if (billInitRef.current || !session) return;
+    if (session.bill_amount !== null && session.bill_amount > 0) {
+      setBillAmount(String(session.bill_amount));
+      billInitRef.current = true;
+    }
+  }, [session]);
+
+  function handleBillBlur(): void {
+    if (!sessionId || !isHost) return;
+    const parsed = parseFloat(billAmount);
+    const amount = isNaN(parsed) || parsed <= 0 ? null : parsed;
+    updateBillAmount(sessionId, amount).catch(() => {});
+  }
 
   // ── Offline detection (heartbeat-based) ──
   const OFFLINE_MS = 10_000;
@@ -112,11 +151,23 @@ export default function LobbyPage(): JSX.Element {
     const now = Date.now();
     const map = new Map<string, boolean>();
     players.forEach((p) => {
-      if (p.user_id === user?.id) { map.set(p.id, false); return; }
-      if (!p.user_id) { map.set(p.id, false); return; }
-      if (!p.last_active_at) { map.set(p.id, false); return; }
+      if (p.user_id === user?.id) {
+        map.set(p.id, false);
+        return;
+      }
+      if (!p.user_id) {
+        map.set(p.id, false);
+        return;
+      }
+      if (!p.last_active_at) {
+        map.set(p.id, false);
+        return;
+      }
       const joinedAgo = now - new Date(p.created_at).getTime();
-      if (joinedAgo < GRACE_MS) { map.set(p.id, false); return; }
+      if (joinedAgo < GRACE_MS) {
+        map.set(p.id, false);
+        return;
+      }
       map.set(p.id, now - new Date(p.last_active_at).getTime() > OFFLINE_MS);
     });
     return map;
@@ -136,21 +187,18 @@ export default function LobbyPage(): JSX.Element {
   const bgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!isHost || !sessionId) return;
-    const sub = AppState.addEventListener(
-      'change',
-      (state: AppStateStatus) => {
-        if (state === 'background' || state === 'inactive') {
-          bgTimerRef.current = setTimeout(() => {
-            cancelGameSession(sessionId).catch(() => {});
-          }, 15_000);
-        } else if (state === 'active') {
-          if (bgTimerRef.current) {
-            clearTimeout(bgTimerRef.current);
-            bgTimerRef.current = null;
-          }
+    const sub = AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (state === 'background' || state === 'inactive') {
+        bgTimerRef.current = setTimeout(() => {
+          cancelGameSession(sessionId).catch(() => {});
+        }, 15_000);
+      } else if (state === 'active') {
+        if (bgTimerRef.current) {
+          clearTimeout(bgTimerRef.current);
+          bgTimerRef.current = null;
         }
-      },
-    );
+      }
+    });
     return () => {
       sub.remove();
       if (bgTimerRef.current) clearTimeout(bgTimerRef.current);
@@ -161,9 +209,17 @@ export default function LobbyPage(): JSX.Element {
   useEffect(() => {
     if (navigatedRef.current || !user || players.length === 0) return;
     const stillInGame = players.some((p) => p.user_id === user.id);
-    if (!stillInGame && session?.status && session.status !== 'finished' && session.status !== 'abandoned') {
+    if (
+      !stillInGame &&
+      session?.status &&
+      session.status !== 'finished' &&
+      session.status !== 'abandoned'
+    ) {
       navigatedRef.current = true;
-      Alert.alert('Removed', 'You have been removed from the game by the host.');
+      Alert.alert(
+        'Removed',
+        'You have been removed from the game by the host.',
+      );
       navigateToDashboard();
     }
   }, [players, user, session?.status]);
@@ -208,7 +264,10 @@ export default function LobbyPage(): JSX.Element {
         const kicked = left.filter((n) => kickedNamesRef.current.has(n));
         const departed = left.filter((n) => !kickedNamesRef.current.has(n));
         if (kicked.length > 0) {
-          Alert.alert('Player Removed', `${kicked.join(', ')} has been removed.`);
+          Alert.alert(
+            'Player Removed',
+            `${kicked.join(', ')} has been removed.`,
+          );
           kicked.forEach((n) => kickedNamesRef.current.delete(n));
         }
         if (departed.length > 0) {
@@ -218,6 +277,7 @@ export default function LobbyPage(): JSX.Element {
     }
     prevCountRef.current = players.length;
     prevNamesRef.current = currentNames;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerKey, isHost]);
 
   // ── Actions ──
@@ -226,7 +286,9 @@ export default function LobbyPage(): JSX.Element {
     setActionLoading(true);
     try {
       if (sessionId) await cancelGameSession(sessionId);
-    } catch { /* best-effort */ }
+    } catch {
+      /* best-effort */
+    }
     navigateToDashboard();
   }
 
@@ -235,7 +297,9 @@ export default function LobbyPage(): JSX.Element {
     setActionLoading(true);
     try {
       if (sessionId) await leaveGameSession(sessionId);
-    } catch { /* best-effort */ }
+    } catch {
+      /* best-effort */
+    }
     navigateToDashboard();
   }
 
@@ -244,38 +308,30 @@ export default function LobbyPage(): JSX.Element {
       doHostExit();
       return;
     }
-    Alert.alert(
-      'Leave Game',
-      'Are you sure you want to leave?',
-      [
-        { text: 'Stay', style: 'cancel' },
-        { text: 'Leave', style: 'destructive', onPress: doPlayerLeave },
-      ],
-    );
+    Alert.alert('Leave Game', 'Are you sure you want to leave?', [
+      { text: 'Stay', style: 'cancel' },
+      { text: 'Leave', style: 'destructive', onPress: doPlayerLeave },
+    ]);
   }
 
   function handleKickPlayer(playerId: string, playerName: string): void {
     if (!sessionId) return;
-    Alert.alert(
-      'Remove Player',
-      `Remove ${playerName} from the game?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            kickedNamesRef.current.add(playerName);
-            const result = await kickOfflinePlayer(sessionId, playerId);
-            if (result.error) {
-              kickedNamesRef.current.delete(playerName);
-              if (__DEV__) console.log(`[Kick] FAILED: ${result.error.message}`);
-              Alert.alert('Error', result.error.message);
-            }
-          },
+    Alert.alert('Remove Player', `Remove ${playerName} from the game?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          kickedNamesRef.current.add(playerName);
+          const result = await kickOfflinePlayer(sessionId, playerId);
+          if (result.error) {
+            kickedNamesRef.current.delete(playerName);
+            if (__DEV__) console.log(`[Kick] FAILED: ${result.error.message}`);
+            Alert.alert('Error', result.error.message);
+          }
         },
-      ],
-    );
+      },
+    ]);
   }
 
   function togglePlayer(playerId: string): void {
@@ -291,6 +347,13 @@ export default function LobbyPage(): JSX.Element {
     if (!sessionId || actionLoading) return;
     setActionLoading(true);
     try {
+      // Save the bill amount before starting — guarantees it's persisted
+      // even if the host taps Start before the input blurs naturally.
+      const parsedBill = parseFloat(billAmount);
+      const billToSave =
+        isNaN(parsedBill) || parsedBill <= 0 ? null : parsedBill;
+      await updateBillAmount(sessionId, billToSave);
+
       const { error: startError } = await startGame(sessionId);
       if (startError) {
         setActionLoading(false);
@@ -366,7 +429,24 @@ export default function LobbyPage(): JSX.Element {
                 keyboardType="numeric"
                 value={billAmount}
                 onChangeText={setBillAmount}
+                onBlur={handleBillBlur}
+                onSubmitEditing={handleBillBlur}
+                returnKeyType="done"
+                editable={isHost}
               />
+              {isHost && billAmount.trim().length > 0 ? (
+                <Pressable
+                  onPress={handleBillBlur}
+                  style={({ pressed }) => [
+                    styles.billDoneBtn,
+                    pressed && { opacity: 0.7 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Save bill amount"
+                >
+                  <Text style={styles.billDoneText}>Done</Text>
+                </Pressable>
+              ) : null}
             </View>
           </View>
 
@@ -379,9 +459,7 @@ export default function LobbyPage(): JSX.Element {
 
           {/* Players Card */}
           <View style={styles.playersCard}>
-            <Text style={styles.playersLabel}>
-              PLAYER • {players.length}
-            </Text>
+            <Text style={styles.playersLabel}>PLAYER • {players.length}</Text>
 
             {loading ? (
               <ActivityIndicator
@@ -409,6 +487,13 @@ export default function LobbyPage(): JSX.Element {
                     {isPlayerOffline.get(player.id) ? (
                       <View style={styles.offlineBadge}>
                         <Text style={styles.offlineBadgeText}>Offline</Text>
+                      </View>
+                    ) : null}
+
+                    {/* Bot badge */}
+                    {!player.user_id ? (
+                      <View style={styles.botBadge}>
+                        <Text style={styles.botBadgeText}>Bot</Text>
                       </View>
                     ) : null}
 
@@ -462,17 +547,17 @@ export default function LobbyPage(): JSX.Element {
             onPress={handleStartGame}
             style={({ pressed }) => [
               { width: '100%' },
-              pressed && canStart && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+              pressed &&
+                canStart && { opacity: 0.85, transform: [{ scale: 0.98 }] },
             ]}
           >
             <LinearGradient
-              colors={canStart ? ['#F4736A', '#E8556A'] : ['#F4736A88', '#E8556A88']}
+              colors={
+                canStart ? ['#F4736A', '#E8556A'] : ['#F4736A88', '#E8556A88']
+              }
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-              style={[
-                styles.startBtn,
-                !canStart && styles.startBtnDisabled,
-              ]}
+              style={[styles.startBtn, !canStart && styles.startBtnDisabled]}
             >
               {actionLoading ? (
                 <ActivityIndicator size="small" color="#fff" />
@@ -513,4 +598,3 @@ export default function LobbyPage(): JSX.Element {
     </AppBackground>
   );
 }
-

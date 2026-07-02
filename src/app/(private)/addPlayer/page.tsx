@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
+  ActivityIndicator,
   Alert,
+  Image as RNImage,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -15,9 +17,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 
 import AppBackground from '@/components/AppBackground';
+import { getAvatarById } from '@/constants/avatars';
 import AuthContext from '@/contexts/auth';
 import useGameSession from '@/hooks/game/useGameSession';
 import { addManualPlayer, kickOfflinePlayer } from '@/services/game';
+import { getFriends, inviteFriendToSession } from '@/services/friends';
+import type { Friend } from '@/services/friends';
 
 function TrashIcon(): React.JSX.Element {
   return (
@@ -46,8 +51,26 @@ export default function AddPlayerPage(): JSX.Element {
   );
   const [name, setName] = useState('');
   const [adding, setAdding] = useState(false);
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(true);
+  const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
 
   const manualPlayers = players.filter((p) => !p.user_id);
+  const playerUserIds = new Set(players.map((p) => p.user_id).filter(Boolean));
+
+  const loadFriends = useCallback(async (): Promise<void> => {
+    setFriendsLoading(true);
+    const result = await getFriends();
+    if (!result.error) {
+      setFriends(result.friends.filter((f) => f.status === 'accepted'));
+    }
+    setFriendsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    loadFriends();
+  }, [loadFriends]);
 
   async function handleAdd(): Promise<void> {
     if (!name.trim() || !sessionId || adding) return;
@@ -66,12 +89,49 @@ export default function AddPlayerPage(): JSX.Element {
     }
   }
 
+  async function handleInvite(friend: Friend): Promise<void> {
+    if (!sessionId || invitingId) return;
+    const friendUserId = friend.user_id === user?.id ? friend.friend_id : friend.user_id;
+    setInvitingId(friendUserId);
+    try {
+      const result = await inviteFriendToSession(sessionId, friendUserId);
+      if (result.error) {
+        Alert.alert('Error', result.error.message);
+      } else {
+        setInvitedIds((prev) => new Set(prev).add(friendUserId));
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to invite friend.');
+    } finally {
+      setInvitingId(null);
+    }
+  }
+
   async function handleRemove(playerId: string): Promise<void> {
     if (!sessionId) return;
     const result = await kickOfflinePlayer(sessionId, playerId);
     if (result.error) {
       Alert.alert('Error', result.error.message);
     }
+  }
+
+  function renderAvatar(avatarId: string | null, name: string | null, size: number): React.JSX.Element {
+    const avatar = avatarId ? getAvatarById(avatarId) : null;
+    return (
+      <View style={[s.avatar, { width: size, height: size, borderRadius: size / 2 }]}>
+        {avatar ? (
+          <RNImage
+            source={avatar.source}
+            style={{ width: size - 4, height: size - 4, borderRadius: (size - 4) / 2 }}
+            resizeMode="cover"
+          />
+        ) : (
+          <Text style={[s.avatarLetter, { fontSize: size * 0.4 }]}>
+            {name ? name.charAt(0).toUpperCase() : '?'}
+          </Text>
+        )}
+      </View>
+    );
   }
 
   return (
@@ -81,7 +141,6 @@ export default function AddPlayerPage(): JSX.Element {
           contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
         >
-          {/* Back button */}
           <Pressable
             onPress={() => router.back()}
             style={({ pressed }) => [s.backBtn, pressed && { opacity: 0.6 }]}
@@ -91,10 +150,59 @@ export default function AddPlayerPage(): JSX.Element {
             <Ionicons name="chevron-back" size={20} color="#fff" />
           </Pressable>
 
-          {/* Title — large, sits where the input field used to be */}
           <Text style={s.title}>ADD PLAYER</Text>
 
-          {/* Input row — two separate white boxes */}
+          {/* ── Friends Section ── */}
+          {friendsLoading ? (
+            <ActivityIndicator size="small" color="rgba(255,255,255,0.5)" style={{ marginBottom: 20 }} />
+          ) : friends.length > 0 ? (
+            <>
+              <Text style={s.sectionLabel}>INVITE FRIENDS</Text>
+              {friends.map((f) => {
+                const friendUserId = f.user_id === user?.id ? f.friend_id : f.user_id;
+                const alreadyIn = playerUserIds.has(friendUserId);
+                const isInviting = invitingId === friendUserId;
+                return (
+                  <View key={f.id} style={s.friendRow}>
+                    {renderAvatar(f.friend_avatar_id, f.friend_name, 42)}
+                    <Text style={s.friendName} numberOfLines={1}>{f.friend_name ?? 'Unknown'}</Text>
+                    {alreadyIn ? (
+                      <View style={s.joinedBadge}>
+                        <Ionicons name="checkmark-circle" size={16} color="#22C55E" />
+                        <Text style={s.joinedText}>Joined</Text>
+                      </View>
+                    ) : invitedIds.has(friendUserId) ? (
+                      <View style={s.invitedBadge}>
+                        <Ionicons name="time-outline" size={14} color="#F4736A" />
+                        <Text style={s.invitedText}>Invited</Text>
+                      </View>
+                    ) : (
+                      <Pressable
+                        onPress={() => handleInvite(f)}
+                        disabled={isInviting}
+                        style={({ pressed }) => [
+                          s.inviteBtn,
+                          pressed && { opacity: 0.7 },
+                          isInviting && { opacity: 0.5 },
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Invite ${f.friend_name}`}
+                      >
+                        {isInviting ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Text style={s.inviteText}>Invite</Text>
+                        )}
+                      </Pressable>
+                    )}
+                  </View>
+                );
+              })}
+            </>
+          ) : null}
+
+          {/* ── Manual Players Section ── */}
+          <Text style={s.sectionLabel}>ADD MANUAL PLAYER</Text>
           <View style={s.inputRow}>
             <TextInput
               style={s.nameInput}
@@ -120,7 +228,6 @@ export default function AddPlayerPage(): JSX.Element {
             </Pressable>
           </View>
 
-          {/* Player list */}
           {manualPlayers.map((player) => (
             <View key={player.id} style={s.playerRow}>
               <View style={s.playerCard}>
@@ -136,13 +243,8 @@ export default function AddPlayerPage(): JSX.Element {
               </Pressable>
             </View>
           ))}
-
-          {manualPlayers.length === 0 ? (
-            <Text style={s.emptyText}>No manual players added yet</Text>
-          ) : null}
         </ScrollView>
 
-        {/* Bottom buttons */}
         <View style={s.bottomRow}>
           <Pressable
             onPress={() => router.back()}
@@ -171,7 +273,12 @@ export default function AddPlayerPage(): JSX.Element {
 
 const s = StyleSheet.create({
   safe: { flex: 1 },
-
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 100,
+  },
   backBtn: {
     width: 36,
     height: 36,
@@ -190,109 +297,154 @@ const s = StyleSheet.create({
     textShadowOffset: { width: 2, height: 3 },
     textShadowRadius: 0,
     textAlign: 'center',
-    marginBottom: 32,
-  },
-
-  scroll: {
-    flexGrow: 1,
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 100,
-  },
-
-  // ── Input row — two separate white boxes ──
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
     marginBottom: 24,
   },
-  nameInput: {
-    flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    borderRadius: 16,
-    height: 58,
-    paddingHorizontal: 18,
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 17,
-    color: '#333',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.9)',
-    shadowColor: '#4A3ABA',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  addBox: {
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    borderRadius: 16,
-    width: 58,
-    height: 58,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.9)',
-    shadowColor: '#4A3ABA',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  addText: {
-    fontFamily: 'Baloo2_800ExtraBold',
-    fontSize: 17,
-    color: '#333',
+
+  sectionLabel: {
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.55)',
+    letterSpacing: 2,
+    marginBottom: 12,
+    marginTop: 4,
   },
 
-  // ── Player rows — name card + trash box as siblings ──
-  playerRow: {
+  // ── Friend rows ──
+  friendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+  },
+  avatar: {
+    backgroundColor: '#F4736A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarLetter: {
+    fontFamily: 'DMSans_700Bold',
+    color: '#FFFFFF',
+  },
+  friendName: {
+    flex: 1,
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 16,
+    color: '#FFFFFF',
+  },
+  inviteBtn: {
+    backgroundColor: '#F4736A',
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+  },
+  inviteText: {
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 13,
+    color: '#FFFFFF',
+  },
+  joinedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(34,197,94,0.15)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  joinedText: {
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 12,
+    color: '#22C55E',
+  },
+
+  invitedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(244,115,106,0.15)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  invitedText: {
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 12,
+    color: '#F4736A',
+  },
+
+  // ── Input row ──
+  inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 20,
   },
+  nameInput: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 16,
+    height: 54,
+    paddingHorizontal: 18,
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 16,
+    color: '#333',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.9)',
+  },
+  addBox: {
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 16,
+    width: 54,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.9)',
+  },
+  addText: {
+    fontFamily: 'Baloo2_800ExtraBold',
+    fontSize: 16,
+    color: '#333',
+  },
+
+  // ── Player rows ──
+  playerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 14,
+  },
   playerCard: {
     flex: 1,
     backgroundColor: 'rgba(255,255,255,0.85)',
     borderRadius: 16,
-    height: 58,
+    height: 54,
     paddingHorizontal: 18,
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.9)',
-    shadowColor: '#4A3ABA',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
   },
   playerName: {
     fontFamily: 'DMSans_700Bold',
-    fontSize: 17,
+    fontSize: 16,
     color: '#333',
   },
   trashBox: {
-    width: 58,
-    height: 58,
+    width: 54,
+    height: 54,
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.85)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.9)',
-    shadowColor: '#4A3ABA',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  emptyText: {
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
-    textAlign: 'center',
-    marginTop: 30,
   },
 
   // ── Bottom buttons ──
@@ -319,9 +471,7 @@ const s = StyleSheet.create({
     fontSize: 16,
     color: '#FFFFFF',
   },
-  nextBtn: {
-    flex: 1,
-  },
+  nextBtn: { flex: 1 },
   nextBtnText: {
     fontFamily: 'Baloo2_800ExtraBold',
     fontSize: 16,
